@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { properties, loans, incomes, formatCurrency, getLoanForProperty } from "@/lib/data";
 
 export default function Dashboard() {
@@ -53,7 +54,16 @@ export default function Dashboard() {
             const growthPct = ((property.currentValue - property.purchasePrice) / property.purchasePrice * 100).toFixed(1);
 
             return (
-              <div key={property.id} className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-5">
+              <div key={property.id} className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] overflow-hidden">
+                <div className="relative h-48 w-full">
+                  <Image
+                    src={property.image}
+                    alt={property.address}
+                    fill
+                    className="object-cover"
+                  />
+                </div>
+                <div className="p-5">
                 <div className="flex items-start justify-between mb-3">
                   <div>
                     <h4 className="font-semibold">{property.address}</h4>
@@ -83,6 +93,7 @@ export default function Dashboard() {
                     <span className="text-[var(--muted)]"> (paying interest on {formatCurrency(loan.balance - loan.offsetBalance)})</span>
                   </div>
                 )}
+                </div>
               </div>
             );
           })}

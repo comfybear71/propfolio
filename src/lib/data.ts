@@ -21,6 +21,7 @@ export interface Property {
   growthSincePurchase: number;
   weeklyRent: number;
   rentNotes: string;
+  image: string;
 }
 
 export interface Loan {
@@ -88,6 +89,7 @@ export const properties: Property[] = [
     growthSincePurchase: 412000,
     weeklyRent: 1400,
     rentNotes: "Room rentals while owner-occupied",
+    image: "/images/60_Bagshaw.jpeg",
   },
   {
     id: "72-bagshaw",
@@ -109,6 +111,7 @@ export const properties: Property[] = [
     growthSincePurchase: 156000,
     weeklyRent: 1000,
     rentNotes: "Fully tenanted investment property",
+    image: "/images/72_Bagshaw.jpeg",
   },
 ];
 

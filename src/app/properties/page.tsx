@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { properties as defaultProperties, loans as defaultLoans, formatCurrency, formatCurrencyExact, type Property, type Loan } from "@/lib/data";
 
 export default function PropertiesPage() {
@@ -38,7 +39,16 @@ export default function PropertiesPage() {
         const isEditing = editing === property.id;
 
         return (
-          <div key={property.id} className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-6">
+          <div key={property.id} className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] overflow-hidden">
+            <div className="relative h-56 w-full">
+              <Image
+                src={property.image}
+                alt={property.address}
+                fill
+                className="object-cover"
+              />
+            </div>
+            <div className="p-6">
             <div className="flex items-start justify-between mb-4">
               <div>
                 <h3 className="text-xl font-bold">{property.address}</h3>
@@ -143,6 +153,7 @@ export default function PropertiesPage() {
                   </>
                 )}
               </div>
+            </div>
             </div>
           </div>
         );
