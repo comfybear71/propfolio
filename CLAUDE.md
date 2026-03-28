@@ -50,9 +50,11 @@ propfolio/
 
 ## Git Workflow
 - Main branch: `main`
-- Feature branches: `claude/<description>`
+- Feature branches: `claude/<description>` (e.g. `claude/new-session-1Sz2q`)
+- **IMPORTANT:** All development happens on `claude/` branches. The user manually merges into `main` after testing. Never merge to `main` or push to `main` directly.
+- Vercel deploys from `main`. Changes only go live after the user merges the Claude branch.
 - Always commit with clear messages
-- Push to feature branch, then merge to main
+- Push to the Claude feature branch only
 
 ## Known Issues / Errors
 - Initial Vercel deploy showed 404 because repo had no app code (fixed)

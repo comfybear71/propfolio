@@ -32,7 +32,7 @@
 - Phase 2 & 3 features from README not started
 
 ## Immediate Next Steps
-1. Merge feature branch into `main` so Vercel deploys the working app
+1. User to manually merge `claude/new-session-1Sz2q` into `main` after testing (Vercel deploys from `main`)
 2. Set up Supabase project and connect database
 3. Add property CRUD (add/edit/delete properties)
 4. Add user authentication via Supabase Auth
@@ -54,6 +54,11 @@
 | Date | Error | Resolution |
 |------|-------|------------|
 | 2026-03-28 | Vercel 404 NOT_FOUND on deploy | Repo only had README.md, no app code. Scaffolded full Next.js app. |
+
+## Git Workflow Reminder
+- **All development happens on `claude/` branches.** Never merge to `main` or push to `main` directly.
+- The user manually tests on the Claude branch and merges to `main` themselves.
+- Vercel production deploys from `main` only. The Claude branch must be merged by the user before changes go live.
 
 ## Notes for Next Claude
 - Read `CLAUDE.md` first for project context and rules

@@ -64,6 +64,13 @@ Built with Australian property investing in mind:
 
 ---
 
+## 🔀 Git Workflow
+
+- All development is done on `claude/` feature branches (e.g. `claude/new-session-1Sz2q`)
+- Claude never merges to `main` or pushes to `main` directly
+- After testing on the Claude branch, Stuart manually merges into `main`
+- Vercel production deploys from `main` only
+
 ## 🚀 Getting Started
 
 ```bash
