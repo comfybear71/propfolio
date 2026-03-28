@@ -54,6 +54,7 @@
 | Date | Error | Resolution |
 |------|-------|------------|
 | 2026-03-28 | Vercel 404 NOT_FOUND on deploy | Repo only had README.md, no app code. Scaffolded full Next.js app. |
+| 2026-03-28 | Vercel build failed: No Output Directory named "public" | Vercel didn't auto-detect Next.js framework. Added `vercel.json` with `"framework": "nextjs"`. |
 
 ## Git Workflow Reminder
 - **All development happens on `claude/` branches.** Never merge to `main` or push to `main` directly.
