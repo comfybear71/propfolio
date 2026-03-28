@@ -1,252 +1,140 @@
-const sampleProperties = [
-  {
-    id: 1,
-    address: "12 Ocean Drive",
-    suburb: "Scarborough",
-    state: "WA",
-    purchasePrice: 520000,
-    purchaseDate: "2021-03-15",
-    currentValue: 645000,
-    mortgageRemaining: 416000,
-    weeklyRent: 550,
-    status: "Owned" as const,
-  },
-  {
-    id: 2,
-    address: "45 Railway Parade",
-    suburb: "Midland",
-    state: "WA",
-    purchasePrice: 385000,
-    purchaseDate: "2023-08-01",
-    currentValue: 420000,
-    mortgageRemaining: 346500,
-    weeklyRent: 450,
-    status: "Owned" as const,
-  },
-  {
-    id: 3,
-    address: "8 Banksia Crescent",
-    suburb: "Baldivis",
-    state: "WA",
-    purchasePrice: 0,
-    purchaseDate: "",
-    currentValue: 510000,
-    mortgageRemaining: 0,
-    weeklyRent: 0,
-    status: "Watching" as const,
-  },
-];
+"use client";
 
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("en-AU", {
-    style: "currency",
-    currency: "AUD",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
+import Link from "next/link";
+import { properties, loans, incomes, formatCurrency, getLoanForProperty } from "@/lib/data";
 
-function formatDate(dateStr: string): string {
-  if (!dateStr) return "-";
-  return new Date(dateStr).toLocaleDateString("en-AU", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
-
-export default function Home() {
-  const ownedProperties = sampleProperties.filter((p) => p.status === "Owned");
-
-  const totalValue = ownedProperties.reduce(
-    (sum, p) => sum + p.currentValue,
-    0
-  );
-  const totalMortgage = ownedProperties.reduce(
-    (sum, p) => sum + p.mortgageRemaining,
-    0
-  );
+export default function Dashboard() {
+  const totalValue = properties.reduce((sum, p) => sum + p.currentValue, 0);
+  const totalMortgage = loans.reduce((sum, l) => sum + l.balance, 0);
   const totalEquity = totalValue - totalMortgage;
-  const totalWeeklyRent = ownedProperties.reduce(
-    (sum, p) => sum + p.weeklyRent,
-    0
-  );
+  const totalWeeklyRent = properties.reduce((sum, p) => sum + p.weeklyRent, 0);
   const annualRentalIncome = totalWeeklyRent * 52;
+  const totalAnnualNetIncome = incomes.reduce((sum, i) => sum + i.annualNet, 0);
+  const totalAnnualGrossIncome = incomes.reduce((sum, i) => sum + i.annualGross, 0);
+  const totalOffsetBalance = loans.reduce((sum, l) => sum + l.offsetBalance, 0);
+  const portfolioLVR = (totalMortgage / totalValue) * 100;
+  const effectiveDebt = totalMortgage - totalOffsetBalance;
 
   return (
     <div className="space-y-8">
       <div>
         <h2 className="text-2xl font-bold mb-1">Dashboard</h2>
-        <p className="text-[var(--muted)]">
-          Your property portfolio at a glance
-        </p>
+        <p className="text-[var(--muted)]">Stuart & Sasitron — Portfolio Overview</p>
       </div>
 
-      {/* Summary Cards */}
+      {/* Top Summary */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <SummaryCard
-          label="Total Portfolio Value"
-          value={formatCurrency(totalValue)}
-        />
-        <SummaryCard
-          label="Total Equity"
-          value={formatCurrency(totalEquity)}
-          positive
-        />
-        <SummaryCard
-          label="Total Mortgage"
-          value={formatCurrency(totalMortgage)}
-        />
-        <SummaryCard
-          label="Annual Rental Income"
-          value={formatCurrency(annualRentalIncome)}
-          positive
-        />
+        <SummaryCard label="Portfolio Value" value={formatCurrency(totalValue)} />
+        <SummaryCard label="Total Equity" value={formatCurrency(totalEquity)} positive />
+        <SummaryCard label="Total Debt" value={formatCurrency(totalMortgage)} />
+        <SummaryCard label="Effective Debt (after offset)" value={formatCurrency(effectiveDebt)} />
       </div>
 
-      {/* Properties Table */}
-      <div>
-        <h3 className="text-lg font-semibold mb-4">Properties</h3>
-        <div className="overflow-x-auto rounded-lg border border-[var(--card-border)]">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-[var(--card)] text-left text-[var(--muted)]">
-                <th className="px-4 py-3 font-medium">Property</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium text-right">
-                  Purchase Price
-                </th>
-                <th className="px-4 py-3 font-medium text-right">
-                  Current Value
-                </th>
-                <th className="px-4 py-3 font-medium text-right">Equity</th>
-                <th className="px-4 py-3 font-medium text-right">
-                  Weekly Rent
-                </th>
-                <th className="px-4 py-3 font-medium">Purchased</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sampleProperties.map((property) => {
-                const equity =
-                  property.currentValue - property.mortgageRemaining;
-                const growth = property.purchasePrice
-                  ? (
-                      ((property.currentValue - property.purchasePrice) /
-                        property.purchasePrice) *
-                      100
-                    ).toFixed(1)
-                  : null;
+      {/* Income & Rent Row */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <SummaryCard label="Combined Gross Income" value={formatCurrency(totalAnnualGrossIncome)} subtext="/year" />
+        <SummaryCard label="Combined Net Income" value={formatCurrency(totalAnnualNetIncome)} positive subtext="/year" />
+        <SummaryCard label="Rental Income" value={formatCurrency(annualRentalIncome)} positive subtext="/year" />
+        <SummaryCard label="Offset Savings" value={formatCurrency(totalOffsetBalance)} positive />
+      </div>
 
-                return (
-                  <tr
-                    key={property.id}
-                    className="border-t border-[var(--card-border)] hover:bg-[var(--card)]"
-                  >
-                    <td className="px-4 py-3">
-                      <div className="font-medium">{property.address}</div>
-                      <div className="text-[var(--muted)] text-xs">
-                        {property.suburb}, {property.state}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                          property.status === "Owned"
-                            ? "bg-[var(--positive)]/20 text-[var(--positive)]"
-                            : "bg-[var(--accent)]/20 text-[var(--accent)]"
-                        }`}
-                      >
-                        {property.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {property.purchasePrice
-                        ? formatCurrency(property.purchasePrice)
-                        : "-"}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {formatCurrency(property.currentValue)}
-                      {growth && (
-                        <span className="text-[var(--positive)] text-xs ml-1">
-                          +{growth}%
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {property.status === "Owned"
-                        ? formatCurrency(equity)
-                        : "-"}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {property.weeklyRent
-                        ? formatCurrency(property.weeklyRent)
-                        : "-"}
-                      {property.weeklyRent ? (
-                        <span className="text-[var(--muted)] text-xs">
-                          /wk
-                        </span>
-                      ) : null}
-                    </td>
-                    <td className="px-4 py-3 text-[var(--muted)]">
-                      {formatDate(property.purchaseDate)}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      {/* Properties Overview */}
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold">Properties</h3>
+          <Link href="/properties" className="text-sm text-[var(--accent)] hover:underline">
+            View details
+          </Link>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {properties.map((property) => {
+            const loan = getLoanForProperty(property.id);
+            const equity = property.currentValue - (loan?.balance ?? 0);
+            const growthPct = ((property.currentValue - property.purchasePrice) / property.purchasePrice * 100).toFixed(1);
+
+            return (
+              <div key={property.id} className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-5">
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <h4 className="font-semibold">{property.address}</h4>
+                    <p className="text-sm text-[var(--muted)]">{property.suburb}, {property.state} {property.postcode}</p>
+                  </div>
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded ${
+                    property.type === "PPOR"
+                      ? "bg-[var(--accent)]/20 text-[var(--accent)]"
+                      : "bg-[var(--positive)]/20 text-[var(--positive)]"
+                  }`}>
+                    {property.type}
+                  </span>
+                </div>
+                <div className="text-sm text-[var(--muted)] mb-1">Owner: {property.owner}</div>
+                <div className="grid grid-cols-2 gap-3 mt-4">
+                  <Stat label="Current Value" value={formatCurrency(property.currentValue)} />
+                  <Stat label="Growth" value={`+${formatCurrency(property.growthSincePurchase)}`} sub={`+${growthPct}%`} positive />
+                  <Stat label="Loan Balance" value={formatCurrency(loan?.balance ?? 0)} />
+                  <Stat label="Equity" value={formatCurrency(equity)} positive />
+                  <Stat label="Weekly Rent" value={formatCurrency(property.weeklyRent)} />
+                  <Stat label="Interest Rate" value={`${loan?.interestRate ?? 0}%`} />
+                </div>
+                {loan && loan.offsetBalance > 0 && (
+                  <div className="mt-3 pt-3 border-t border-[var(--card-border)] text-sm">
+                    <span className="text-[var(--muted)]">Offset: </span>
+                    <span className="text-[var(--positive)] font-medium">{formatCurrency(loan.offsetBalance)}</span>
+                    <span className="text-[var(--muted)]"> (paying interest on {formatCurrency(loan.balance - loan.offsetBalance)})</span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 
       {/* Quick Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-4">
-          <div className="text-[var(--muted)] text-sm mb-1">
-            Properties Owned
-          </div>
-          <div className="text-2xl font-bold">{ownedProperties.length}</div>
+          <div className="text-[var(--muted)] text-sm mb-1">Portfolio LVR</div>
+          <div className="text-2xl font-bold">{portfolioLVR.toFixed(1)}%</div>
         </div>
         <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-4">
-          <div className="text-[var(--muted)] text-sm mb-1">
-            Avg. Weekly Rent
-          </div>
-          <div className="text-2xl font-bold">
-            {formatCurrency(totalWeeklyRent / ownedProperties.length)}
-          </div>
+          <div className="text-[var(--muted)] text-sm mb-1">Weekly Rent (Total)</div>
+          <div className="text-2xl font-bold text-[var(--positive)]">{formatCurrency(totalWeeklyRent)}<span className="text-sm text-[var(--muted)]">/wk</span></div>
         </div>
         <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-4">
-          <div className="text-[var(--muted)] text-sm mb-1">
-            Portfolio LVR
-          </div>
-          <div className="text-2xl font-bold">
-            {((totalMortgage / totalValue) * 100).toFixed(1)}%
-          </div>
+          <div className="text-[var(--muted)] text-sm mb-1">Combined Net Fortnightly</div>
+          <div className="text-2xl font-bold text-[var(--positive)]">{formatCurrency(incomes.reduce((s, i) => s + i.netFortnightly, 0))}</div>
         </div>
       </div>
 
       <p className="text-center text-[var(--muted)] text-xs pt-4">
-        Built with care in Perth, WA
+        Built with care in Gray, NT
       </p>
     </div>
   );
 }
 
-function SummaryCard({
-  label,
-  value,
-  positive,
-}: {
-  label: string;
-  value: string;
-  positive?: boolean;
+function SummaryCard({ label, value, positive, subtext }: {
+  label: string; value: string; positive?: boolean; subtext?: string;
 }) {
   return (
     <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-4">
       <div className="text-[var(--muted)] text-sm mb-1">{label}</div>
-      <div
-        className={`text-2xl font-bold ${positive ? "text-[var(--positive)]" : ""}`}
-      >
+      <div className={`text-2xl font-bold ${positive ? "text-[var(--positive)]" : ""}`}>
         {value}
+        {subtext && <span className="text-sm text-[var(--muted)] font-normal ml-1">{subtext}</span>}
+      </div>
+    </div>
+  );
+}
+
+function Stat({ label, value, sub, positive }: {
+  label: string; value: string; sub?: string; positive?: boolean;
+}) {
+  return (
+    <div>
+      <div className="text-xs text-[var(--muted)]">{label}</div>
+      <div className={`text-sm font-semibold ${positive ? "text-[var(--positive)]" : ""}`}>
+        {value}
+        {sub && <span className="text-xs ml-1">{sub}</span>}
       </div>
     </div>
   );
