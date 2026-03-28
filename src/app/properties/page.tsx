@@ -82,12 +82,15 @@ export default function PropertiesPage() {
                 <div className="space-y-2">
                   <EditableRow label="Property Type" value={property.propertyType} editing={isEditing}
                     onChange={(v) => updateProperty(property.id, "propertyType", v)} />
-                  <EditableRow label="Bedrooms" value={property.bedrooms?.toString() ?? "—"} editing={isEditing}
-                    onChange={(v) => updateProperty(property.id, "bedrooms", Number(v))} />
-                  <EditableRow label="Bathrooms" value={property.bathrooms?.toString() ?? "—"} editing={isEditing}
-                    onChange={(v) => updateProperty(property.id, "bathrooms", Number(v))} />
-                  <EditableRow label="Car Spaces" value={property.carSpaces?.toString() ?? "—"} editing={isEditing}
-                    onChange={(v) => updateProperty(property.id, "carSpaces", Number(v))} />
+                  <EditableRow label="Bedrooms" value={property.bedrooms != null ? String(property.bedrooms) : ""} editing={isEditing}
+                    placeholder="—"
+                    onChange={(v) => updateProperty(property.id, "bedrooms", v === "" ? 0 : Number(v))} />
+                  <EditableRow label="Bathrooms" value={property.bathrooms != null ? String(property.bathrooms) : ""} editing={isEditing}
+                    placeholder="—"
+                    onChange={(v) => updateProperty(property.id, "bathrooms", v === "" ? 0 : Number(v))} />
+                  <EditableRow label="Car Spaces" value={property.carSpaces != null ? String(property.carSpaces) : ""} editing={isEditing}
+                    placeholder="—"
+                    onChange={(v) => updateProperty(property.id, "carSpaces", v === "" ? 0 : Number(v))} />
                   <EditableRow label="Land Size" value={property.landSize} editing={isEditing}
                     onChange={(v) => updateProperty(property.id, "landSize", v)} />
                 </div>
@@ -174,10 +177,11 @@ function Row({ label, value, positive }: { label: string; value: string; positiv
   );
 }
 
-function EditableRow({ label, value, editing, onChange, suffix }: {
-  label: string; value: string; editing: boolean; onChange: (v: string) => void; suffix?: string;
+function EditableRow({ label, value, editing, onChange, suffix, placeholder }: {
+  label: string; value: string; editing: boolean; onChange: (v: string) => void; suffix?: string; placeholder?: string;
 }) {
-  if (!editing) return <Row label={label} value={suffix ? `${value}${suffix}` : value} />;
+  const display = value || placeholder || "—";
+  if (!editing) return <Row label={label} value={suffix ? `${display}${suffix}` : display} />;
   return (
     <div className="flex justify-between items-center py-1">
       <span className="text-sm text-[var(--muted)]">{label}</span>
@@ -185,6 +189,7 @@ function EditableRow({ label, value, editing, onChange, suffix }: {
         <input
           type="text"
           value={value}
+          placeholder={placeholder}
           onChange={(e) => onChange(e.target.value)}
           className="bg-[var(--background)] border border-[var(--card-border)] rounded px-2 py-1 text-sm text-right w-32 focus:border-[var(--accent)] outline-none"
         />
