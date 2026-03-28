@@ -30,6 +30,35 @@ export default function Dashboard() {
   const portfolioLVR = (totalMortgage / totalValue) * 100;
   const effectiveDebt = totalMortgage - totalOffsetBalance;
 
+  // Borrowing capacity calculations
+  const rentalShading = 0.80;
+  const assessmentBuffer = 3.0;
+  const dsrLimit = 0.35;
+  const loanTerm = 30;
+  const totalAssessedIncome = totalAnnualGrossIncome + (annualRentalIncome * rentalShading);
+  const existingAnnualDebt = loans.reduce((s, l) =>
+    s + l.repaymentAmount * (l.repaymentFrequency === "fortnightly" ? 26 : 12), 0
+  );
+  const assessmentRate = (Math.max(...loans.map((l) => l.interestRate)) + assessmentBuffer) / 100;
+  const maxAnnualRepayment = totalAssessedIncome * dsrLimit - existingAnnualDebt;
+  const monthlyRate = assessmentRate / 12;
+  const numPayments = loanTerm * 12;
+  const maxBorrowing = maxAnnualRepayment > 0
+    ? (maxAnnualRepayment / 12) * ((1 - Math.pow(1 + monthlyRate, -numPayments)) / monthlyRate)
+    : 0;
+  // DTI check
+  const dtiLimit = 6;
+  const maxDebtByDTI = totalAnnualGrossIncome * dtiLimit - totalMortgage;
+  const effectiveMaxBorrowing = Math.min(Math.max(0, maxBorrowing), Math.max(0, maxDebtByDTI));
+  // Usable equity
+  const usableEquity = properties.reduce((sum, p) => {
+    const loan = loans.find((l) => l.propertyId === p.id);
+    return sum + Math.max(0, p.currentValue * 0.8 - (loan?.balance ?? 0));
+  }, 0);
+  // Max property price (with 20% deposit from equity + offset)
+  const totalAvailableFunds = usableEquity + totalOffsetBalance;
+  const maxPropertyPrice = Math.min(effectiveMaxBorrowing / 0.8, totalAvailableFunds / 0.2);
+
   return (
     <div className="space-y-8">
       <div>
@@ -51,6 +80,43 @@ export default function Dashboard() {
         <SummaryCard label="Combined Net Income" value={formatCurrency(totalAnnualNetIncome)} positive subtext="/year" />
         <SummaryCard label="Rental Income" value={formatCurrency(annualRentalIncome)} positive subtext="/year" />
         <SummaryCard label="Offset Savings" value={formatCurrency(totalOffsetBalance)} positive />
+      </div>
+
+      {/* Borrowing Capacity */}
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold">Borrowing Power</h3>
+          <Link href="/borrowing" className="text-sm text-[var(--accent)] hover:underline">
+            Full calculator
+          </Link>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <SummaryCard label="Est. Max New Borrowing" value={formatCurrency(effectiveMaxBorrowing)} positive />
+          <SummaryCard label="Usable Equity (80% LVR)" value={formatCurrency(usableEquity)} positive />
+          <SummaryCard label="Available for Deposit" value={formatCurrency(totalAvailableFunds)} positive subtext="equity + offset" />
+          <SummaryCard label="Max Property Price" value={formatCurrency(maxPropertyPrice)} positive subtext="at 20% deposit" />
+        </div>
+        <div className="mt-4 rounded-lg border border-[var(--accent)]/30 bg-[var(--accent)]/5 p-4">
+          <div className="text-sm font-medium mb-2">Your Price Range</div>
+          <div className="text-2xl font-bold text-[var(--positive)]">Up to {formatCurrency(maxPropertyPrice)}</div>
+          <div className="text-xs text-[var(--muted)] mt-1">
+            Based on {formatCurrency(effectiveMaxBorrowing)} max borrowing + {formatCurrency(totalAvailableFunds)} available funds for deposit.
+            Assessment rate: {(assessmentRate * 100).toFixed(1)}% | DTI: {(totalMortgage / totalAnnualGrossIncome).toFixed(1)}x of {dtiLimit}x limit
+          </div>
+          <div className="mt-3 pt-3 border-t border-[var(--accent)]/20">
+            <div className="text-xs font-medium text-[var(--muted)] mb-2">How to increase your borrowing power:</div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-xs text-[var(--muted)]">
+              <div>- Pay down existing debt (reduces DTI)</div>
+              <div>- Increase rental income (raises assessed income)</div>
+              <div>- Reduce living expenses on record</div>
+              <div>- Close unused credit cards (limits count as debt)</div>
+              <div>- Switch investment loans to interest-only (lower repayments)</div>
+              <div>- Refinance to a lower rate (reduces assessment rate)</div>
+              <div>- Add offset funds (doesn&apos;t reduce loan but shows savings)</div>
+              <div>- Use a broker to find lenders with higher DTI tolerance</div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Properties Overview */}
