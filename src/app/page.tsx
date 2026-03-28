@@ -30,34 +30,42 @@ export default function Dashboard() {
   const portfolioLVR = (totalMortgage / totalValue) * 100;
   const effectiveDebt = totalMortgage - totalOffsetBalance;
 
-  // Borrowing capacity calculations
-  const rentalShading = 0.80;
-  const assessmentBuffer = 3.0;
-  const dsrLimit = 0.35;
-  const loanTerm = 30;
-  const totalAssessedIncome = totalAnnualGrossIncome + (annualRentalIncome * rentalShading);
-  const existingAnnualDebt = loans.reduce((s, l) =>
-    s + l.repaymentAmount * (l.repaymentFrequency === "fortnightly" ? 26 : 12), 0
-  );
-  const assessmentRate = (Math.max(...loans.map((l) => l.interestRate)) + assessmentBuffer) / 100;
-  const maxAnnualRepayment = totalAssessedIncome * dsrLimit - existingAnnualDebt;
-  const monthlyRate = assessmentRate / 12;
-  const numPayments = loanTerm * 12;
-  const maxBorrowing = maxAnnualRepayment > 0
-    ? (maxAnnualRepayment / 12) * ((1 - Math.pow(1 + monthlyRate, -numPayments)) / monthlyRate)
-    : 0;
-  // DTI check
-  const dtiLimit = 6;
-  const maxDebtByDTI = totalAnnualGrossIncome * dtiLimit - totalMortgage;
-  const effectiveMaxBorrowing = Math.min(Math.max(0, maxBorrowing), Math.max(0, maxDebtByDTI));
-  // Usable equity
-  const usableEquity = properties.reduce((sum, p) => {
+  // Equity release — how much you can pull from each property (80% LVR)
+  const equityPerProperty = properties.map((p) => {
     const loan = loans.find((l) => l.propertyId === p.id);
-    return sum + Math.max(0, p.currentValue * 0.8 - (loan?.balance ?? 0));
-  }, 0);
-  // Max property price (with 20% deposit from equity + offset)
+    const bal = loan?.balance ?? 0;
+    const maxLoan = p.currentValue * 0.8;
+    return { address: p.address, owner: p.owner, value: p.currentValue, loan: bal, usable: Math.max(0, maxLoan - bal) };
+  });
+  const usableEquity = equityPerProperty.reduce((s, e) => s + e.usable, 0);
   const totalAvailableFunds = usableEquity + totalOffsetBalance;
-  const maxPropertyPrice = Math.min(effectiveMaxBorrowing / 0.8, totalAvailableFunds / 0.2);
+
+  // Your strategy: release equity as deposit, borrow the rest
+  // If you release $100K each = $200K deposit, what property can you target?
+  const equityRelease = Math.min(usableEquity, 200000); // $100K each as you described
+  const depositFromOffset = 0; // keeping offset for interest savings
+  const totalDeposit = equityRelease;
+  // At 20% deposit, max property = deposit / 0.2 = deposit * 5
+  // At 25% deposit, max property = deposit / 0.25 = deposit * 4
+  const maxPropertyAt20 = totalDeposit / 0.20;
+  const maxPropertyAt25 = totalDeposit / 0.25;
+  const newLoanAt20 = maxPropertyAt20 * 0.80;
+  const newLoanAt25 = maxPropertyAt25 * 0.75;
+
+  // What does the repayment look like?
+  const estRate = 6.5;
+  const monthlyRate = estRate / 100 / 12;
+  const numPayments = 30 * 12;
+  const repaymentAt20 = newLoanAt20 > 0
+    ? (newLoanAt20 * monthlyRate * Math.pow(1 + monthlyRate, numPayments)) / (Math.pow(1 + monthlyRate, numPayments) - 1)
+    : 0;
+  const estNewRentWeekly = 600;
+  const estAnnualRent = estNewRentWeekly * 52;
+  const cashFlowAt20 = estAnnualRent - (repaymentAt20 * 12);
+
+  // DTI check (total debt including new loan)
+  const totalDebtAfterPurchase = totalMortgage + equityRelease + newLoanAt20;
+  const dtiAfterPurchase = totalDebtAfterPurchase / totalAnnualGrossIncome;
 
   return (
     <div className="space-y-8">
@@ -82,39 +90,108 @@ export default function Dashboard() {
         <SummaryCard label="Offset Savings" value={formatCurrency(totalOffsetBalance)} positive />
       </div>
 
-      {/* Borrowing Capacity */}
+      {/* Equity Release & Next Property */}
       <div>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold">Borrowing Power</h3>
+          <h3 className="text-lg font-semibold">Next Property — Equity Release Strategy</h3>
           <Link href="/borrowing" className="text-sm text-[var(--accent)] hover:underline">
             Full calculator
           </Link>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <SummaryCard label="Est. Max New Borrowing" value={formatCurrency(effectiveMaxBorrowing)} positive />
-          <SummaryCard label="Usable Equity (80% LVR)" value={formatCurrency(usableEquity)} positive />
-          <SummaryCard label="Available for Deposit" value={formatCurrency(totalAvailableFunds)} positive subtext="equity + offset" />
-          <SummaryCard label="Max Property Price" value={formatCurrency(maxPropertyPrice)} positive subtext="at 20% deposit" />
-        </div>
-        <div className="mt-4 rounded-lg border border-[var(--accent)]/30 bg-[var(--accent)]/5 p-4">
-          <div className="text-sm font-medium mb-2">Your Price Range</div>
-          <div className="text-2xl font-bold text-[var(--positive)]">Up to {formatCurrency(maxPropertyPrice)}</div>
-          <div className="text-xs text-[var(--muted)] mt-1">
-            Based on {formatCurrency(effectiveMaxBorrowing)} max borrowing + {formatCurrency(totalAvailableFunds)} available funds for deposit.
-            Assessment rate: {(assessmentRate * 100).toFixed(1)}% | DTI: {(totalMortgage / totalAnnualGrossIncome).toFixed(1)}x of {dtiLimit}x limit
+
+        {/* How equity release works */}
+        <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-5 mb-4">
+          <div className="text-sm font-medium mb-3">Your Available Equity</div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-[var(--muted)]">
+                  <th className="pb-2 font-medium">Property</th>
+                  <th className="pb-2 font-medium text-right">Value</th>
+                  <th className="pb-2 font-medium text-right">Current Loan</th>
+                  <th className="pb-2 font-medium text-right">80% of Value</th>
+                  <th className="pb-2 font-medium text-right">You Can Release</th>
+                </tr>
+              </thead>
+              <tbody>
+                {equityPerProperty.map((e) => (
+                  <tr key={e.address} className="border-t border-[var(--card-border)]">
+                    <td className="py-2"><div className="font-medium">{e.address}</div><div className="text-xs text-[var(--muted)]">{e.owner}</div></td>
+                    <td className="py-2 text-right">{formatCurrency(e.value)}</td>
+                    <td className="py-2 text-right">{formatCurrency(e.loan)}</td>
+                    <td className="py-2 text-right">{formatCurrency(e.value * 0.8)}</td>
+                    <td className="py-2 text-right text-[var(--positive)] font-semibold">{formatCurrency(e.usable)}</td>
+                  </tr>
+                ))}
+                <tr className="border-t-2 border-[var(--card-border)] font-semibold">
+                  <td className="py-2">Total Available</td>
+                  <td className="py-2 text-right">{formatCurrency(totalValue)}</td>
+                  <td className="py-2 text-right">{formatCurrency(totalMortgage)}</td>
+                  <td className="py-2 text-right">{formatCurrency(totalValue * 0.8)}</td>
+                  <td className="py-2 text-right text-[var(--positive)]">{formatCurrency(usableEquity)}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
-          <div className="mt-3 pt-3 border-t border-[var(--accent)]/20">
-            <div className="text-xs font-medium text-[var(--muted)] mb-2">How to increase your borrowing power:</div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-xs text-[var(--muted)]">
-              <div>- Pay down existing debt (reduces DTI)</div>
-              <div>- Increase rental income (raises assessed income)</div>
-              <div>- Reduce living expenses on record</div>
-              <div>- Close unused credit cards (limits count as debt)</div>
-              <div>- Switch investment loans to interest-only (lower repayments)</div>
-              <div>- Refinance to a lower rate (reduces assessment rate)</div>
-              <div>- Add offset funds (doesn&apos;t reduce loan but shows savings)</div>
-              <div>- Use a broker to find lenders with higher DTI tolerance</div>
+          <p className="text-xs text-[var(--muted)] mt-2">
+            Plus {formatCurrency(totalOffsetBalance)} in offset = {formatCurrency(totalAvailableFunds)} total available funds
+          </p>
+        </div>
+
+        {/* The scenario */}
+        <div className="rounded-lg border border-[var(--positive)]/30 bg-[var(--positive)]/5 p-5 mb-4">
+          <div className="text-sm font-medium mb-3">Example: Release $100K Each → Buy a $1M New Build</div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
+            <div className="space-y-2">
+              <div className="text-xs font-medium text-[var(--muted)] uppercase tracking-wide">Step 1: Get Deposit</div>
+              <div className="flex justify-between"><span className="text-[var(--muted)]">Release from 60 Bagshaw</span><span>{formatCurrency(Math.min(equityPerProperty[0]?.usable ?? 0, 100000))}</span></div>
+              <div className="flex justify-between"><span className="text-[var(--muted)]">Release from 72 Bagshaw</span><span>{formatCurrency(Math.min(equityPerProperty[1]?.usable ?? 0, 100000))}</span></div>
+              <div className="flex justify-between font-semibold border-t border-[var(--positive)]/20 pt-1"><span>Total Deposit</span><span className="text-[var(--positive)]">{formatCurrency(equityRelease)}</span></div>
+              <div className="flex justify-between"><span className="text-[var(--muted)]">NT BuildBonus</span><span className="text-[var(--positive)]">+{formatCurrency(30000)}</span></div>
             </div>
+            <div className="space-y-2">
+              <div className="text-xs font-medium text-[var(--muted)] uppercase tracking-wide">Step 2: Buy Property</div>
+              <div className="flex justify-between"><span className="text-[var(--muted)]">Max price (20% deposit)</span><span className="font-semibold text-[var(--positive)]">{formatCurrency(maxPropertyAt20)}</span></div>
+              <div className="flex justify-between"><span className="text-[var(--muted)]">Max price (25% deposit)</span><span>{formatCurrency(maxPropertyAt25)}</span></div>
+              <div className="flex justify-between"><span className="text-[var(--muted)]">New loan (at 20%)</span><span>{formatCurrency(newLoanAt20)}</span></div>
+              <div className="flex justify-between"><span className="text-[var(--muted)]">Monthly repayment</span><span>{formatCurrency(repaymentAt20)}/mo</span></div>
+            </div>
+            <div className="space-y-2">
+              <div className="text-xs font-medium text-[var(--muted)] uppercase tracking-wide">Step 3: Cash Flow</div>
+              <div className="flex justify-between"><span className="text-[var(--muted)]">Expected rent</span><span className="text-[var(--positive)]">{formatCurrency(estNewRentWeekly)}/wk</span></div>
+              <div className="flex justify-between"><span className="text-[var(--muted)]">Annual rent</span><span className="text-[var(--positive)]">{formatCurrency(estAnnualRent)}</span></div>
+              <div className="flex justify-between"><span className="text-[var(--muted)]">Annual repayment</span><span>{formatCurrency(repaymentAt20 * 12)}</span></div>
+              <div className="flex justify-between font-semibold border-t border-[var(--positive)]/20 pt-1">
+                <span>Cash flow</span>
+                <span className={cashFlowAt20 >= 0 ? "text-[var(--positive)]" : "text-[var(--negative)]"}>
+                  {cashFlowAt20 >= 0 ? "+" : ""}{formatCurrency(cashFlowAt20)}/yr
+                </span>
+              </div>
+              <div className="flex justify-between"><span className="text-[var(--muted)]">DTI after purchase</span>
+                <span className={dtiAfterPurchase > 6 ? "text-[var(--negative)] font-semibold" : ""}>{dtiAfterPurchase.toFixed(1)}x</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <SummaryCard label="Your Deposit Power" value={formatCurrency(usableEquity)} positive subtext="equity release" />
+          <SummaryCard label="Max Property (20% dep)" value={formatCurrency(maxPropertyAt20)} positive />
+          <SummaryCard label="Max Property (25% dep)" value={formatCurrency(maxPropertyAt25)} />
+          <SummaryCard label="Offset (keep for savings)" value={formatCurrency(totalOffsetBalance)} positive />
+        </div>
+
+        <div className="mt-4 rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-4">
+          <div className="text-xs font-medium text-[var(--muted)] mb-2">Tips to strengthen your position:</div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-xs text-[var(--muted)]">
+            <div>- Keep offset funds high (reduces interest on 72 Bagshaw)</div>
+            <div>- Get formal property valuations (may be higher than estimates)</div>
+            <div>- Close any unused credit cards before applying</div>
+            <div>- Consider interest-only on investment loans (frees cash flow)</div>
+            <div>- Use a mortgage broker (access to more lenders)</div>
+            <div>- Gather all documents early (see Documents page)</div>
+            <div>- New builds get $30K grant + full depreciation benefits</div>
+            <div>- Stamp duty on land only for new builds in NT</div>
           </div>
         </div>
       </div>
