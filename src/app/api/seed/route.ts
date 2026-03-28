@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { properties, loans, incomes, defaultExpenses } from "@/lib/data";
+import { properties, loans, incomes, defaultExpenses, defaultAssets } from "@/lib/data";
 
 export async function POST() {
   const db = await getDb();
@@ -26,6 +26,11 @@ export async function POST() {
     await db.collection("expenses").insertMany(defaultExpenses.map((e) => ({ ...e })));
   }
 
+  const assetCount = await db.collection("assets").countDocuments();
+  if (assetCount === 0) {
+    await db.collection("assets").insertMany(defaultAssets.map((a) => ({ ...a })));
+  }
+
   return NextResponse.json({
     ok: true,
     seeded: {
@@ -33,6 +38,7 @@ export async function POST() {
       loans: loanCount === 0 ? loans.length : "already existed",
       incomes: incomeCount === 0 ? incomes.length : "already existed",
       expenses: expenseCount === 0 ? defaultExpenses.length : "already existed",
+      assets: assetCount === 0 ? defaultAssets.length : "already existed",
     },
   });
 }

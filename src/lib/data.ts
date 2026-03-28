@@ -66,6 +66,28 @@ export interface Expense {
   frequency: "weekly" | "fortnightly" | "monthly" | "quarterly" | "annually";
 }
 
+export interface Asset {
+  id: string;
+  owner: string;
+  category: "Superannuation" | "Vehicle" | "Portable Home" | "Overseas Property" | "Savings" | "Shares" | "Other";
+  description: string;
+  estimatedValue: number;
+  notes: string;
+  relevantForLending: boolean;
+}
+
+// ─── ASSETS ────────────────────────────────────────────────────
+
+export const defaultAssets: Asset[] = [
+  { id: "super-stuart", owner: "Stuart French", category: "Superannuation", description: "HOSTPLUS / AustralianSuper", estimatedValue: 250000, notes: "Cannot access until preservation age", relevantForLending: false },
+  { id: "super-sasitron", owner: "Sasitron Ransuk", category: "Superannuation", description: "Host Plus Super Fund", estimatedValue: 85000, notes: "Cannot access until preservation age", relevantForLending: false },
+  { id: "portable-homes", owner: "Stuart French", category: "Portable Home", description: "Portable homes / demountables", estimatedValue: 100000, notes: "Physical assets, can be sold", relevantForLending: true },
+  { id: "car-sasitron", owner: "Sasitron Ransuk", category: "Vehicle", description: "Car (near new)", estimatedValue: 0, notes: "Update with make, model, and value", relevantForLending: true },
+  { id: "bike-stuart", owner: "Stuart French", category: "Vehicle", description: "Motorbike (near new)", estimatedValue: 0, notes: "Update with make, model, and value", relevantForLending: true },
+  { id: "property-thailand", owner: "Sasitron Ransuk", category: "Overseas Property", description: "Property in Thailand", estimatedValue: 0, notes: "Not typically counted by AU lenders", relevantForLending: false },
+  { id: "property-bali", owner: "Stuart French", category: "Overseas Property", description: "Property in Bali, Indonesia", estimatedValue: 0, notes: "Not typically counted by AU lenders", relevantForLending: false },
+];
+
 // ─── PROPERTIES ────────────────────────────────────────────────
 
 export const properties: Property[] = [

@@ -6,10 +6,12 @@ import {
   loans as defaultLoans,
   incomes as defaultIncomes,
   defaultExpenses,
+  defaultAssets,
   type Property,
   type Loan,
   type Income,
   type Expense,
+  type Asset,
 } from "./data";
 
 export function useProperties() {
@@ -107,4 +109,29 @@ export function useExpenses() {
   }, []);
 
   return { expenses: data, setExpenses: setData, saveAll, loaded };
+}
+
+export function useAssets() {
+  const [data, setData] = useState<Asset[]>(defaultAssets);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/assets")
+      .then((r) => r.json())
+      .then((d) => { if (d.length > 0) setData(d); setLoaded(true); })
+      .catch(() => setLoaded(true));
+  }, []);
+
+  const saveAll = useCallback(async (assets: Asset[]) => {
+    setData(assets);
+    await fetch("/api/assets", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(assets.map(({ id, owner, category, description, estimatedValue, notes, relevantForLending }) =>
+        ({ id, owner, category, description, estimatedValue, notes, relevantForLending })
+      )),
+    }).catch(() => {});
+  }, []);
+
+  return { assets: data, setAssets: setData, saveAll, loaded };
 }
