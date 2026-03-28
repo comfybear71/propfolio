@@ -11,6 +11,7 @@ const links = [
   { href: "/assets", label: "Assets" },
   { href: "/borrowing", label: "Borrowing" },
   { href: "/strategy", label: "Strategy" },
+  { href: "/roadmap", label: "Roadmap" },
   { href: "/documents", label: "Documents" },
   { href: "/tax-guide", label: "Tax Guide" },
 ];
