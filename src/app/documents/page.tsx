@@ -118,11 +118,24 @@ function createDefaultDocuments(): Document[] {
   return docs;
 }
 
+interface FileRecord {
+  documentId: string;
+  filename: string;
+  originalName: string;
+  url: string;
+  size: number;
+  category: string;
+  person: string;
+  uploadedAt: string;
+}
+
 export default function DocumentsPage() {
   const [documents, setDocuments] = useState<Document[]>([]);
+  const [files, setFiles] = useState<FileRecord[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [filterPerson, setFilterPerson] = useState<string>("All");
   const [filterStatus, setFilterStatus] = useState<string>("All");
+  const [uploading, setUploading] = useState<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(null);
 
   const saveDocuments = useCallback(async (docs: Document[]) => {
@@ -134,17 +147,15 @@ export default function DocumentsPage() {
   }, []);
 
   useEffect(() => {
-    fetch("/api/documents")
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.length > 0) setDocuments(d);
-        else setDocuments(createDefaultDocuments());
-        setLoaded(true);
-      })
-      .catch(() => {
-        setDocuments(createDefaultDocuments());
-        setLoaded(true);
-      });
+    Promise.all([
+      fetch("/api/documents").then((r) => r.json()).catch(() => []),
+      fetch("/api/files").then((r) => r.json()).catch(() => []),
+    ]).then(([docs, fileList]) => {
+      if (docs.length > 0) setDocuments(docs);
+      else setDocuments(createDefaultDocuments());
+      if (Array.isArray(fileList)) setFiles(fileList);
+      setLoaded(true);
+    });
   }, []);
 
   function updateDoc(id: string, field: keyof Document, value: string) {
@@ -162,6 +173,49 @@ export default function DocumentsPage() {
     const defaults = createDefaultDocuments();
     setDocuments(defaults);
     saveDocuments(defaults);
+  }
+
+  async function uploadFile(documentId: string, category: string, person: string, file: File) {
+    setUploading(documentId);
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("documentId", documentId);
+    formData.append("category", category);
+    formData.append("person", person);
+
+    try {
+      const res = await fetch("/api/files", { method: "POST", body: formData });
+      const data = await res.json();
+      if (data.ok) {
+        // Refresh files list
+        const updated = await fetch("/api/files").then((r) => r.json());
+        if (Array.isArray(updated)) setFiles(updated);
+        // Auto-set status to "have"
+        updateDoc(documentId, "status", "have");
+      }
+    } catch (e) {
+      console.error("Upload failed:", e);
+    }
+    setUploading(null);
+  }
+
+  async function deleteFile(url: string, documentId: string) {
+    await fetch("/api/files", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url, documentId }),
+    });
+    setFiles((prev) => prev.filter((f) => !(f.url === url && f.documentId === documentId)));
+  }
+
+  function getFilesForDoc(documentId: string) {
+    return files.filter((f) => f.documentId === documentId);
+  }
+
+  function formatFileSize(bytes: number) {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
 
   const totalDocs = documents.length;
@@ -289,35 +343,62 @@ export default function DocumentsPage() {
                       </div>
                       <p className="text-xs text-[var(--muted)] mt-0.5">{doc.description}</p>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <input
-                        type="text"
-                        value={doc.notes}
-                        onChange={(e) => updateDoc(doc.id, "notes", e.target.value)}
-                        placeholder="Notes..."
-                        className="bg-[var(--background)] border border-[var(--card-border)] rounded px-2 py-1 text-xs w-40 focus:border-[var(--accent)] outline-none"
-                      />
-                      <select
-                        value={doc.status}
-                        onChange={(e) => updateDoc(doc.id, "status", e.target.value)}
-                        className={`border rounded px-2 py-1 text-xs font-medium outline-none ${
-                          doc.status === "have"
-                            ? "bg-[var(--positive)]/20 border-[var(--positive)]/30 text-[var(--positive)]"
-                            : doc.status === "missing"
-                            ? "bg-[var(--negative)]/20 border-[var(--negative)]/30 text-[var(--negative)]"
-                            : doc.status === "expired"
-                            ? "bg-yellow-500/20 border-yellow-500/30 text-yellow-500"
-                            : doc.status === "n/a"
-                            ? "bg-[var(--card-border)] border-[var(--card-border)] text-[var(--muted)]"
-                            : "bg-[var(--accent)]/20 border-[var(--accent)]/30 text-[var(--accent)]"
-                        }`}
-                      >
-                        <option value="missing">Missing</option>
-                        <option value="have">Have</option>
-                        <option value="expired">Expired</option>
-                        <option value="requested">Requested</option>
-                        <option value="n/a">N/A</option>
-                      </select>
+                    <div className="flex flex-col gap-2 shrink-0 items-end">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={doc.notes}
+                          onChange={(e) => updateDoc(doc.id, "notes", e.target.value)}
+                          placeholder="Notes..."
+                          className="bg-[var(--background)] border border-[var(--card-border)] rounded px-2 py-1 text-xs w-32 focus:border-[var(--accent)] outline-none"
+                        />
+                        <label className="text-xs px-2 py-1 rounded border border-[var(--card-border)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] cursor-pointer transition-colors">
+                          {uploading === doc.id ? "..." : "Upload"}
+                          <input
+                            type="file"
+                            className="hidden"
+                            accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (f) uploadFile(doc.id, doc.category, doc.forPerson, f);
+                              e.target.value = "";
+                            }}
+                          />
+                        </label>
+                        <select
+                          value={doc.status}
+                          onChange={(e) => updateDoc(doc.id, "status", e.target.value)}
+                          className={`border rounded px-2 py-1 text-xs font-medium outline-none ${
+                            doc.status === "have"
+                              ? "bg-[var(--positive)]/20 border-[var(--positive)]/30 text-[var(--positive)]"
+                              : doc.status === "missing"
+                              ? "bg-[var(--negative)]/20 border-[var(--negative)]/30 text-[var(--negative)]"
+                              : doc.status === "expired"
+                              ? "bg-yellow-500/20 border-yellow-500/30 text-yellow-500"
+                              : doc.status === "n/a"
+                              ? "bg-[var(--card-border)] border-[var(--card-border)] text-[var(--muted)]"
+                              : "bg-[var(--accent)]/20 border-[var(--accent)]/30 text-[var(--accent)]"
+                          }`}
+                        >
+                          <option value="missing">Missing</option>
+                          <option value="have">Have</option>
+                          <option value="expired">Expired</option>
+                          <option value="requested">Requested</option>
+                          <option value="n/a">N/A</option>
+                        </select>
+                      </div>
+                      {/* Uploaded files */}
+                      {getFilesForDoc(doc.id).map((f) => (
+                        <div key={f.url} className="flex items-center gap-2 text-xs">
+                          <a href={f.url} target="_blank" rel="noopener noreferrer"
+                            className="text-[var(--accent)] hover:underline truncate max-w-[180px]">
+                            {f.originalName}
+                          </a>
+                          <span className="text-[var(--muted)]">{formatFileSize(f.size)}</span>
+                          <button onClick={() => deleteFile(f.url, doc.id)}
+                            className="text-[var(--muted)] hover:text-[var(--negative)]">x</button>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 );
@@ -327,13 +408,36 @@ export default function DocumentsPage() {
         );
       })}
 
+      {/* Broker Pack Summary */}
       <div className="rounded-lg border border-[var(--accent)]/30 bg-[var(--accent)]/5 p-5">
-        <h4 className="font-semibold mb-2">Future: File Upload & Sharing</h4>
-        <p className="text-sm text-[var(--muted)]">
-          Once MongoDB is connected, you&apos;ll be able to upload actual files (PDFs, photos) for each document,
-          store them securely, and generate share links for your broker. For now, use this checklist to track
-          what you have ready on your phone/computer.
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="font-semibold">Broker Pack</h4>
+          <span className="text-sm text-[var(--muted)]">{files.length} files uploaded</span>
+        </div>
+        <p className="text-sm text-[var(--muted)] mb-3">
+          Upload files against each document above. Use the naming convention:<br />
+          <code className="text-xs bg-[var(--background)] px-1 py-0.5 rounded">YYYY-MM_Category_Person_Description.pdf</code>
         </p>
+        {files.length > 0 && (
+          <div className="space-y-2">
+            <div className="text-xs font-medium text-[var(--muted)] uppercase tracking-wide">All Uploaded Files</div>
+            <div className="max-h-48 overflow-y-auto space-y-1">
+              {files.map((f) => (
+                <div key={f.url} className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-[var(--muted)] shrink-0">{f.category}</span>
+                    <a href={f.url} target="_blank" rel="noopener noreferrer"
+                      className="text-[var(--accent)] hover:underline truncate">{f.originalName}</a>
+                  </div>
+                  <span className="text-[var(--muted)] shrink-0 ml-2">{formatFileSize(f.size)}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-[var(--muted)] pt-2">
+              To send to your broker: download each file from the links above, or share this page URL.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
