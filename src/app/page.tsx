@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { formatCurrency } from "@/lib/data";
@@ -129,6 +130,8 @@ export default function Dashboard() {
         </div>
       </div>
 
+      <SeedButton />
+
       <p className="text-center text-[var(--muted)] text-xs pt-4">
         Built with care in Gray, NT
       </p>
@@ -160,6 +163,56 @@ function Stat({ label, value, sub, positive }: {
         {value}
         {sub && <span className="text-xs ml-1">{sub}</span>}
       </div>
+    </div>
+  );
+}
+
+function SeedButton() {
+  const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
+  const [result, setResult] = useState<string>("");
+
+  async function handleSeed() {
+    setStatus("loading");
+    try {
+      const res = await fetch("/api/seed", { method: "POST" });
+      const data = await res.json();
+      if (data.ok) {
+        setStatus("done");
+        setResult(JSON.stringify(data.seeded, null, 2));
+      } else {
+        setStatus("error");
+        setResult(data.error || "Unknown error");
+      }
+    } catch (e) {
+      setStatus("error");
+      setResult(String(e));
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="text-sm font-medium">Database Setup</div>
+          <div className="text-xs text-[var(--muted)]">Seed MongoDB with your property, loan, income & expense data</div>
+        </div>
+        <button
+          onClick={handleSeed}
+          disabled={status === "loading"}
+          className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
+            status === "done"
+              ? "bg-[var(--positive)]/20 text-[var(--positive)] border border-[var(--positive)]/30"
+              : status === "error"
+              ? "bg-[var(--negative)]/20 text-[var(--negative)] border border-[var(--negative)]/30"
+              : "bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]"
+          }`}
+        >
+          {status === "loading" ? "Seeding..." : status === "done" ? "Seeded" : status === "error" ? "Failed" : "Seed Database"}
+        </button>
+      </div>
+      {result && (
+        <pre className="mt-3 text-xs text-[var(--muted)] bg-[var(--background)] rounded p-2 overflow-x-auto">{result}</pre>
+      )}
     </div>
   );
 }
