@@ -1,0 +1,329 @@
+"use client";
+
+import { useState, useEffect } from "react";
+
+const STORAGE_KEY = "propfolio-documents";
+
+interface Document {
+  id: string;
+  category: string;
+  name: string;
+  description: string;
+  status: "missing" | "have" | "expired" | "requested";
+  notes: string;
+  lastUpdated: string;
+  forPerson: "Stuart" | "Sasitron" | "Both" | "Property";
+}
+
+const documentCategories = [
+  {
+    name: "Identity & Personal",
+    icon: "ID",
+    docs: [
+      { name: "Photo ID (Drivers Licence)", description: "Current and not expired", forPerson: "Both" as const },
+      { name: "Passport", description: "Current passport or certified copy", forPerson: "Both" as const },
+      { name: "Medicare Card", description: "Current Medicare card", forPerson: "Both" as const },
+      { name: "Birth Certificate / Citizenship", description: "Proof of Australian citizenship or residency", forPerson: "Both" as const },
+    ],
+  },
+  {
+    name: "Income & Employment",
+    icon: "Pay",
+    docs: [
+      { name: "Latest 2 payslips", description: "Most recent consecutive payslips showing YTD", forPerson: "Both" as const },
+      { name: "Employment letter / contract", description: "Confirming role, salary, and employment type", forPerson: "Both" as const },
+      { name: "Tax return (latest)", description: "Latest ATO tax return / Notice of Assessment", forPerson: "Both" as const },
+      { name: "Tax return (previous year)", description: "Previous year's ATO tax return / NOA", forPerson: "Both" as const },
+      { name: "Rental income evidence", description: "Lease agreements, property manager statements", forPerson: "Both" as const },
+      { name: "Group Certificate / PAYG Summary", description: "Annual income summary from employer", forPerson: "Both" as const },
+    ],
+  },
+  {
+    name: "Assets & Savings",
+    icon: "Bank",
+    docs: [
+      { name: "Bank statements (3 months)", description: "All transaction accounts showing savings pattern", forPerson: "Both" as const },
+      { name: "Offset account statements", description: "Current offset account balance and history", forPerson: "Sasitron" as const },
+      { name: "Superannuation statement", description: "Latest super balance statement", forPerson: "Both" as const },
+      { name: "Share portfolio / investments", description: "Any managed funds, shares, crypto holdings", forPerson: "Both" as const },
+      { name: "Vehicle registration", description: "Proof of vehicle ownership and value", forPerson: "Both" as const },
+    ],
+  },
+  {
+    name: "Existing Properties",
+    icon: "Home",
+    docs: [
+      { name: "60 Bagshaw - Title deed", description: "Certificate of Title", forPerson: "Stuart" as const },
+      { name: "60 Bagshaw - Mortgage statement", description: "Latest home loan statement", forPerson: "Stuart" as const },
+      { name: "60 Bagshaw - Council rates notice", description: "Latest rates notice from council", forPerson: "Stuart" as const },
+      { name: "60 Bagshaw - Insurance certificate", description: "Home & contents / landlord insurance", forPerson: "Stuart" as const },
+      { name: "60 Bagshaw - Rental agreements", description: "Room rental agreements with tenants", forPerson: "Stuart" as const },
+      { name: "72 Bagshaw - Title deed", description: "Certificate of Title", forPerson: "Sasitron" as const },
+      { name: "72 Bagshaw - Mortgage statement", description: "Latest home loan statement from ING", forPerson: "Sasitron" as const },
+      { name: "72 Bagshaw - Lease agreement", description: "Current tenant lease agreement", forPerson: "Sasitron" as const },
+      { name: "72 Bagshaw - Property manager statement", description: "Rental income statements from agent", forPerson: "Sasitron" as const },
+      { name: "72 Bagshaw - Council rates notice", description: "Latest rates notice from council", forPerson: "Sasitron" as const },
+      { name: "72 Bagshaw - Insurance certificate", description: "Landlord insurance policy", forPerson: "Sasitron" as const },
+      { name: "72 Bagshaw - Depreciation schedule", description: "Tax depreciation schedule from quantity surveyor", forPerson: "Sasitron" as const },
+    ],
+  },
+  {
+    name: "Liabilities & Commitments",
+    icon: "Debt",
+    docs: [
+      { name: "Credit card statements", description: "All credit cards — latest statements showing limits", forPerson: "Both" as const },
+      { name: "Personal loan statements", description: "Any personal loans, car loans, BNPL", forPerson: "Both" as const },
+      { name: "HECS-HELP statement", description: "Outstanding HECS/HELP debt balance", forPerson: "Both" as const },
+      { name: "Child support / maintenance", description: "Any ongoing support obligations", forPerson: "Both" as const },
+    ],
+  },
+  {
+    name: "Living Expenses",
+    icon: "Bills",
+    docs: [
+      { name: "Monthly expense breakdown", description: "Detailed living expenses (use Propfolio Finances page)", forPerson: "Both" as const },
+      { name: "Health insurance statement", description: "Private health cover details", forPerson: "Both" as const },
+      { name: "Childcare / school fees", description: "Any education costs", forPerson: "Both" as const },
+    ],
+  },
+  {
+    name: "New Purchase (when ready)",
+    icon: "New",
+    docs: [
+      { name: "Contract of Sale", description: "Signed contract for the property being purchased", forPerson: "Property" as const },
+      { name: "Building & pest report", description: "Pre-purchase inspection reports", forPerson: "Property" as const },
+      { name: "Valuation report", description: "Bank-ordered or independent valuation", forPerson: "Property" as const },
+      { name: "Builder quote / fixed price contract", description: "For new builds — construction costs breakdown", forPerson: "Property" as const },
+      { name: "NT BuildBonus grant application", description: "$30,000 NT Government grant for new builds", forPerson: "Property" as const },
+      { name: "Council / planning approvals", description: "Development approval if building", forPerson: "Property" as const },
+    ],
+  },
+];
+
+function createDefaultDocuments(): Document[] {
+  const docs: Document[] = [];
+  let id = 1;
+  for (const cat of documentCategories) {
+    for (const doc of cat.docs) {
+      docs.push({
+        id: String(id++),
+        category: cat.name,
+        name: doc.name,
+        description: doc.description,
+        status: "missing",
+        notes: "",
+        lastUpdated: "",
+        forPerson: doc.forPerson,
+      });
+    }
+  }
+  return docs;
+}
+
+export default function DocumentsPage() {
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [filterPerson, setFilterPerson] = useState<string>("All");
+  const [filterStatus, setFilterStatus] = useState<string>("All");
+
+  useEffect(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      setDocuments(JSON.parse(saved));
+    } else {
+      setDocuments(createDefaultDocuments());
+    }
+    setLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (loaded) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(documents));
+    }
+  }, [documents, loaded]);
+
+  function updateDoc(id: string, field: keyof Document, value: string) {
+    setDocuments((prev) =>
+      prev.map((d) =>
+        d.id === id
+          ? { ...d, [field]: value, lastUpdated: field === "status" ? new Date().toISOString().split("T")[0] : d.lastUpdated }
+          : d
+      )
+    );
+  }
+
+  function resetAll() {
+    setDocuments(createDefaultDocuments());
+  }
+
+  const totalDocs = documents.length;
+  const haveDocs = documents.filter((d) => d.status === "have").length;
+  const missingDocs = documents.filter((d) => d.status === "missing").length;
+  const expiredDocs = documents.filter((d) => d.status === "expired").length;
+  const requestedDocs = documents.filter((d) => d.status === "requested").length;
+  const readyPercent = totalDocs > 0 ? ((haveDocs / totalDocs) * 100).toFixed(0) : "0";
+
+  const filteredCategories = documentCategories.map((cat) => ({
+    ...cat,
+    docs: cat.docs.filter((_, i) => {
+      const doc = documents.find((d) => d.category === cat.name && d.name === cat.docs[i]?.name);
+      if (!doc) return true;
+      if (filterPerson !== "All" && doc.forPerson !== filterPerson && doc.forPerson !== "Both") return false;
+      if (filterStatus !== "All" && doc.status !== filterStatus) return false;
+      return true;
+    }),
+  }));
+
+  if (!loaded) return null;
+
+  return (
+    <div className="space-y-8">
+      <div>
+        <h2 className="text-2xl font-bold mb-1">Document Vault</h2>
+        <p className="text-[var(--muted)]">
+          Everything your broker and bank will need — track what you have and what&apos;s missing
+        </p>
+      </div>
+
+      {/* Readiness Summary */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+        <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-4">
+          <div className="text-[var(--muted)] text-xs mb-1">Broker Ready</div>
+          <div className="text-2xl font-bold text-[var(--accent)]">{readyPercent}%</div>
+          <div className="w-full bg-[var(--card-border)] rounded-full h-1.5 mt-2">
+            <div className="bg-[var(--accent)] h-1.5 rounded-full" style={{ width: `${readyPercent}%` }} />
+          </div>
+        </div>
+        <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-4">
+          <div className="text-[var(--muted)] text-xs mb-1">Have</div>
+          <div className="text-2xl font-bold text-[var(--positive)]">{haveDocs}</div>
+        </div>
+        <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-4">
+          <div className="text-[var(--muted)] text-xs mb-1">Missing</div>
+          <div className="text-2xl font-bold text-[var(--negative)]">{missingDocs}</div>
+        </div>
+        <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-4">
+          <div className="text-[var(--muted)] text-xs mb-1">Expired</div>
+          <div className="text-2xl font-bold text-yellow-500">{expiredDocs}</div>
+        </div>
+        <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-4">
+          <div className="text-[var(--muted)] text-xs mb-1">Requested</div>
+          <div className="text-2xl font-bold text-[var(--accent)]">{requestedDocs}</div>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-[var(--muted)]">Person:</span>
+          {["All", "Stuart", "Sasitron", "Property"].map((p) => (
+            <button key={p} onClick={() => setFilterPerson(p)}
+              className={`text-xs px-3 py-1 rounded border transition-colors ${
+                filterPerson === p
+                  ? "border-[var(--accent)] text-[var(--accent)] bg-[var(--accent)]/10"
+                  : "border-[var(--card-border)] text-[var(--muted)] hover:border-[var(--accent)]"
+              }`}>{p}</button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-[var(--muted)]">Status:</span>
+          {["All", "missing", "have", "expired", "requested"].map((s) => (
+            <button key={s} onClick={() => setFilterStatus(s)}
+              className={`text-xs px-3 py-1 rounded border transition-colors capitalize ${
+                filterStatus === s
+                  ? "border-[var(--accent)] text-[var(--accent)] bg-[var(--accent)]/10"
+                  : "border-[var(--card-border)] text-[var(--muted)] hover:border-[var(--accent)]"
+              }`}>{s}</button>
+          ))}
+        </div>
+        <button onClick={resetAll}
+          className="text-xs px-3 py-1 rounded border border-[var(--card-border)] text-[var(--muted)] hover:text-[var(--negative)] hover:border-[var(--negative)] transition-colors ml-auto">
+          Reset All
+        </button>
+      </div>
+
+      {/* Document Categories */}
+      {filteredCategories.map((cat) => {
+        const catDocs = documents.filter((d) => d.category === cat.name);
+        const catHave = catDocs.filter((d) => d.status === "have").length;
+
+        if (cat.docs.length === 0) return null;
+
+        return (
+          <div key={cat.name} className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] overflow-hidden">
+            <div className="px-5 py-3 border-b border-[var(--card-border)] flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-mono bg-[var(--accent)]/20 text-[var(--accent)] px-2 py-0.5 rounded">{cat.icon}</span>
+                <h3 className="font-semibold">{cat.name}</h3>
+              </div>
+              <span className="text-xs text-[var(--muted)]">{catHave}/{catDocs.length} ready</span>
+            </div>
+            <div className="divide-y divide-[var(--card-border)]">
+              {cat.docs.map((docDef, i) => {
+                const doc = documents.find((d) => d.category === cat.name && d.name === docDef.name);
+                if (!doc) return null;
+
+                // Apply filters
+                if (filterPerson !== "All" && doc.forPerson !== filterPerson && doc.forPerson !== "Both") return null;
+                if (filterStatus !== "All" && doc.status !== filterStatus) return null;
+
+                return (
+                  <div key={doc.id} className="px-5 py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-sm">{doc.name}</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                          doc.forPerson === "Stuart" ? "bg-blue-500/20 text-blue-400" :
+                          doc.forPerson === "Sasitron" ? "bg-purple-500/20 text-purple-400" :
+                          doc.forPerson === "Property" ? "bg-orange-500/20 text-orange-400" :
+                          "bg-[var(--card-border)] text-[var(--muted)]"
+                        }`}>{doc.forPerson}</span>
+                      </div>
+                      <p className="text-xs text-[var(--muted)] mt-0.5">{doc.description}</p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <input
+                        type="text"
+                        value={doc.notes}
+                        onChange={(e) => updateDoc(doc.id, "notes", e.target.value)}
+                        placeholder="Notes..."
+                        className="bg-[var(--background)] border border-[var(--card-border)] rounded px-2 py-1 text-xs w-40 focus:border-[var(--accent)] outline-none"
+                      />
+                      <select
+                        value={doc.status}
+                        onChange={(e) => updateDoc(doc.id, "status", e.target.value)}
+                        className={`border rounded px-2 py-1 text-xs font-medium outline-none ${
+                          doc.status === "have"
+                            ? "bg-[var(--positive)]/20 border-[var(--positive)]/30 text-[var(--positive)]"
+                            : doc.status === "missing"
+                            ? "bg-[var(--negative)]/20 border-[var(--negative)]/30 text-[var(--negative)]"
+                            : doc.status === "expired"
+                            ? "bg-yellow-500/20 border-yellow-500/30 text-yellow-500"
+                            : "bg-[var(--accent)]/20 border-[var(--accent)]/30 text-[var(--accent)]"
+                        }`}
+                      >
+                        <option value="missing">Missing</option>
+                        <option value="have">Have</option>
+                        <option value="expired">Expired</option>
+                        <option value="requested">Requested</option>
+                      </select>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+
+      <div className="rounded-lg border border-[var(--accent)]/30 bg-[var(--accent)]/5 p-5">
+        <h4 className="font-semibold mb-2">Future: File Upload & Sharing</h4>
+        <p className="text-sm text-[var(--muted)]">
+          Once MongoDB is connected, you&apos;ll be able to upload actual files (PDFs, photos) for each document,
+          store them securely, and generate share links for your broker. For now, use this checklist to track
+          what you have ready on your phone/computer.
+        </p>
+      </div>
+    </div>
+  );
+}

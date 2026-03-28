@@ -1,29 +1,42 @@
 # CLAUDE.md - Project Intelligence for Claude
 
 ## Project Overview
-Propfolio is a personal property portfolio tracker for Australian property investors. Built with Next.js, Tailwind CSS, and planned Supabase integration. Hosted on Vercel.
+Propfolio is a personal property portfolio tracker for Australian property investors. Built with Next.js, Tailwind CSS, and MongoDB. Hosted on Vercel. Focused on new builds in the Northern Territory using equity release and the NT BuildBonus $30,000 grant.
 
 ## Tech Stack
 - **Framework:** Next.js 16 (App Router, TypeScript)
 - **Styling:** Tailwind CSS 4 via `@tailwindcss/postcss`
-- **Database:** Supabase (planned - not yet connected)
+- **Database:** MongoDB (connection string in environment variables)
 - **Hosting:** Vercel
 - **Charts:** Recharts (planned - not yet added)
 
 ## Project Structure
 ```
 propfolio/
-├── src/app/           # Next.js App Router pages
-│   ├── layout.tsx     # Root layout with nav bar
-│   ├── page.tsx       # Dashboard homepage
-│   └── globals.css    # Global styles + CSS variables
-├── docs/              # Documentation, errors, problem-solving notes
-├── CLAUDE.md          # This file - project context for Claude
-├── HANDOFF.md         # Session handoff notes
-├── next.config.ts     # Next.js configuration
-├── postcss.config.mjs # PostCSS config (Tailwind)
-├── tsconfig.json      # TypeScript configuration
-└── package.json       # Dependencies and scripts
+├── src/
+│   ├── app/
+│   │   ├── layout.tsx          # Root layout with NavBar
+│   │   ├── page.tsx            # Dashboard homepage
+│   │   ├── globals.css         # Global styles + CSS variables
+│   │   ├── properties/page.tsx # Editable property details
+│   │   ├── finances/page.tsx   # Income + expense entry forms
+│   │   ├── borrowing/page.tsx  # Borrowing calculator (new build focus)
+│   │   ├── strategy/page.tsx   # 5-year portfolio growth planner
+│   │   ├── documents/page.tsx  # Document vault / broker checklist
+│   │   └── tax-guide/page.tsx  # Australian property tax reference
+│   ├── components/
+│   │   └── NavBar.tsx          # Responsive navigation bar
+│   └── lib/
+│       └── data.ts             # Financial data, types, helpers
+├── public/images/              # Property photos
+├── docs/                       # Documentation, errors, problem-solving notes
+├── CLAUDE.md                   # This file - project context for Claude
+├── HANDOFF.md                  # Session handoff notes
+├── vercel.json                 # Vercel framework config
+├── next.config.ts              # Next.js configuration
+├── postcss.config.mjs          # PostCSS config (Tailwind)
+├── tsconfig.json               # TypeScript configuration
+└── package.json                # Dependencies and scripts
 ```
 
 ## Commands
@@ -37,16 +50,24 @@ propfolio/
 - Australian property context (stamp duty, LVR, LMI, offset accounts, negative gearing)
 - Dark theme UI with CSS custom properties defined in `globals.css`
 - Use `@/*` import alias for `src/*` paths
+- **New builds only** — the users are focused on building new properties to get the NT $30,000 BuildBonus grant
+- **Stamp duty on land only** for new builds in the NT (not on the build cost)
+- Two owners: Stuart French (60 Bagshaw) and Sasitron Ransuk (72 Bagshaw), both in Gray, NT
 
 ## Current State
-- Phase 1 dashboard is scaffolded with sample/demo data (3 WA properties)
-- No database connected yet - data is hardcoded in `page.tsx`
-- No authentication yet
+- Full multi-page dashboard with real financial data for 2 Darwin properties
+- 7 pages: Dashboard, Properties, Finances, Borrowing, Strategy, Documents, Tax Guide
+- Editable fields throughout — expenses save to localStorage
+- Borrowing calculator focused on new builds with equity release + $30K grant
+- 5-year portfolio growth planner
+- Document vault with broker checklist
+- No database connected yet — data hardcoded in `src/lib/data.ts`, expenses in localStorage
+- MongoDB planned for persistent storage
 
 ## Planned Phases (from README)
-- **Phase 1:** Property listing, value tracking, equity calculator, rental income, dashboard
-- **Phase 2:** Yield calculator, capital growth, mortgage breakdown, expenses, cash flow
-- **Phase 3:** Portfolio goals, borrowing capacity, suburb research, document storage, AI insights
+- **Phase 1:** Property listing, value tracking, equity calculator, rental income, dashboard ✅
+- **Phase 2:** Yield calculator, capital growth, mortgage breakdown, expenses, cash flow ✅
+- **Phase 3:** Portfolio goals, borrowing capacity, suburb research, document storage, AI insights (partially done)
 
 ## Git Workflow
 - Main branch: `main`
@@ -58,6 +79,7 @@ propfolio/
 
 ## Known Issues / Errors
 - Initial Vercel deploy showed 404 because repo had no app code (fixed)
+- Vercel didn't auto-detect Next.js framework — fixed with `vercel.json`
 - Check `docs/` folder for detailed error logs and resolution notes
 
 ## Style Guide

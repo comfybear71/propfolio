@@ -19,11 +19,16 @@ export default function BorrowingPage() {
   const [existingDebt, setExistingDebt] = useState(
     loans.reduce((s, l) => s + l.repaymentAmount * (l.repaymentFrequency === "fortnightly" ? 26 : 12), 0)
   );
-  const [newPropertyPrice, setNewPropertyPrice] = useState(500000);
-  const [newPropertyDeposit, setNewPropertyDeposit] = useState(20);
+
+  // New Build Scenario
+  const [landPrice, setLandPrice] = useState(250000);
+  const [buildCost, setBuildCost] = useState(350000);
+  const [depositPercent, setDepositPercent] = useState(20);
   const [newLoanRate, setNewLoanRate] = useState(6.5);
   const [newLoanTerm, setNewLoanTerm] = useState(30);
-  const [expectedRent, setExpectedRent] = useState(500);
+  const [expectedRent, setExpectedRent] = useState(600);
+  const [useEquity, setUseEquity] = useState(true);
+  const [claimBuildBonus, setClaimBuildBonus] = useState(true);
 
   // Bank assessment rate (typically 3% buffer)
   const assessmentBuffer = 3.0;
@@ -34,25 +39,16 @@ export default function BorrowingPage() {
   const totalRentalIncome = (rentalIncome60 + rentalIncome72) * rentalShading;
   const totalAssessedIncome = totalGrossIncome + totalRentalIncome;
 
-  // Annual expenses
+  // Annual expenses & debt
   const annualExpenses = monthlyExpenses * 12;
-
-  // Existing commitments (annual)
   const annualExistingDebt = existingDebt;
-
-  // Net Surplus (simplified)
   const netSurplus = totalAssessedIncome - annualExpenses - annualExistingDebt;
 
-  // Max borrowing estimate (simplified DSR method)
-  // Banks typically want total debt servicing < 30-35% of gross income
+  // Max borrowing (simplified DSR method)
   const dsrLimit = 0.35;
   const maxAnnualRepayment = totalAssessedIncome * dsrLimit - annualExistingDebt;
   const assessmentRate = (Math.max(...loans.map((l) => l.interestRate)) + assessmentBuffer) / 100;
-
-  // Monthly payment to annual
   const maxMonthlyRepayment = maxAnnualRepayment / 12;
-
-  // Reverse PMT to find max loan (P&I, monthly)
   const monthlyRate = assessmentRate / 12;
   const numPayments = newLoanTerm * 12;
   const maxLoanAmount =
@@ -60,56 +56,80 @@ export default function BorrowingPage() {
       ? maxMonthlyRepayment * ((1 - Math.pow(1 + monthlyRate, -numPayments)) / monthlyRate)
       : 0;
 
-  // New property scenario
-  const newLoanAmount = newPropertyPrice * (1 - newPropertyDeposit / 100);
-  const depositAmount = newPropertyPrice * (newPropertyDeposit / 100);
-  const stampDutyNT = calculateNTStampDuty(newPropertyPrice);
-  const totalCashRequired = depositAmount + stampDutyNT;
-  const newMonthlyRate = newLoanRate / 100 / 12;
-  const newMonthlyRepayment =
-    (newLoanAmount * newMonthlyRate * Math.pow(1 + newMonthlyRate, numPayments)) /
-    (Math.pow(1 + newMonthlyRate, numPayments) - 1);
-  const newAnnualRepayment = newMonthlyRepayment * 12;
-  const newAnnualRent = expectedRent * 52;
-  const newCashFlow = newAnnualRent - newAnnualRepayment;
-  const newGrossYield = (newAnnualRent / newPropertyPrice) * 100;
-  const canAfford = newLoanAmount <= maxLoanAmount;
-  const newLVR = ((newLoanAmount / newPropertyPrice) * 100);
-  const needsLMI = newLVR > 80;
+  // DTI check
+  const totalExistingDebt = loans.reduce((s, l) => s + l.balance, 0);
+  const dtiLimit = 6;
+  const maxDebtByDTI = totalGrossIncome * dtiLimit;
+  const remainingDTI = maxDebtByDTI - totalExistingDebt;
 
-  // Equity available for deposit (80% usable equity)
-  const totalEquity = properties.reduce((sum, p) => {
-    const loan = loans.find((l) => l.propertyId === p.id);
-    return sum + p.currentValue - (loan?.balance ?? 0);
-  }, 0);
+  // New Build calculations
+  const totalPropertyCost = landPrice + buildCost;
+  const ntBuildBonus = claimBuildBonus ? 30000 : 0;
+  // Stamp duty on LAND ONLY for new builds in NT
+  const stampDutyOnLand = calculateNTStampDuty(landPrice);
+  const depositAmount = totalPropertyCost * (depositPercent / 100);
+  const newLoanAmount = totalPropertyCost - depositAmount;
+  const totalCashNeeded = depositAmount + stampDutyOnLand - ntBuildBonus;
+
+  // Equity available
   const usableEquity = properties.reduce((sum, p) => {
     const loan = loans.find((l) => l.propertyId === p.id);
     const available = p.currentValue * 0.8 - (loan?.balance ?? 0);
     return sum + Math.max(0, available);
   }, 0);
   const offsetCash = loans.reduce((s, l) => s + l.offsetBalance, 0);
-  const totalAvailableFunds = usableEquity + offsetCash;
+  const totalAvailableFunds = (useEquity ? usableEquity : 0) + offsetCash;
+  const fundingGap = totalCashNeeded - totalAvailableFunds;
+
+  // Repayment calcs
+  const newMonthlyRate = newLoanRate / 100 / 12;
+  const newMonthlyRepayment =
+    newLoanAmount > 0 && newMonthlyRate > 0
+      ? (newLoanAmount * newMonthlyRate * Math.pow(1 + newMonthlyRate, numPayments)) /
+        (Math.pow(1 + newMonthlyRate, numPayments) - 1)
+      : 0;
+  const newAnnualRepayment = newMonthlyRepayment * 12;
+  const newAnnualRent = expectedRent * 52;
+  const newCashFlow = newAnnualRent - newAnnualRepayment;
+  const newGrossYield = totalPropertyCost > 0 ? (newAnnualRent / totalPropertyCost) * 100 : 0;
+  const newLVR = totalPropertyCost > 0 ? (newLoanAmount / totalPropertyCost) * 100 : 0;
+  const needsLMI = newLVR > 80;
+  const canAfford = newLoanAmount <= maxLoanAmount && newLoanAmount <= remainingDTI;
+
+  // Depreciation estimate (new build)
+  const annualBuildDeprn = buildCost * 0.025; // Div 43
+  const estimatedPlantDeprn = buildCost * 0.03; // Div 40 estimate
+  const marginalTaxRate = 0.37; // estimated bracket
+  const depreciationTaxSaving = (annualBuildDeprn + estimatedPlantDeprn) * marginalTaxRate;
+
+  // Negative gearing
+  const annualInterest = newLoanAmount * (newLoanRate / 100);
+  const estimatedExpenses = annualInterest + 3000 + 2000 + 1500; // interest + rates + insurance + maintenance
+  const netRentalResult = newAnnualRent - estimatedExpenses;
+  const negGearingTaxSaving = netRentalResult < 0 ? Math.abs(netRentalResult) * marginalTaxRate : 0;
+  const totalTaxBenefits = depreciationTaxSaving + negGearingTaxSaving;
 
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold mb-1">Borrowing Capacity</h2>
-        <p className="text-[var(--muted)]">Estimate what you could borrow and test scenarios</p>
+        <h2 className="text-2xl font-bold mb-1">Borrowing & New Build Planner</h2>
+        <p className="text-[var(--muted)]">Plan your next new build using equity, the NT BuildBonus, and tax benefits</p>
       </div>
 
       {/* Current Position */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card label="Estimated Max Borrowing" value={formatCurrency(Math.max(0, maxLoanAmount))} positive />
-        <Card label="Usable Equity (80% LVR)" value={formatCurrency(usableEquity)} positive />
-        <Card label="Offset Cash Available" value={formatCurrency(offsetCash)} positive />
-        <Card label="Total Available Funds" value={formatCurrency(totalAvailableFunds)} positive />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <Card label="Max Borrowing (DSR)" value={formatCurrency(Math.max(0, maxLoanAmount))} positive />
+        <Card label="Max Borrowing (DTI 6x)" value={formatCurrency(Math.max(0, remainingDTI))} positive />
+        <Card label="Usable Equity (80%)" value={formatCurrency(usableEquity)} positive />
+        <Card label="Offset Cash" value={formatCurrency(offsetCash)} positive />
+        <Card label="Total Available" value={formatCurrency(usableEquity + offsetCash)} positive />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Income & Expenses Inputs */}
+        {/* Income & Expenses */}
         <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-5">
           <h3 className="font-semibold mb-4">Your Financials</h3>
-          <p className="text-xs text-[var(--muted)] mb-4">Adjust these to see how it affects borrowing capacity</p>
+          <p className="text-xs text-[var(--muted)] mb-4">Adjust these to see how they affect borrowing capacity</p>
           <div className="space-y-3">
             <InputRow label="Stuart Gross Annual" value={stuartGross} onChange={setStuartGross} prefix="$" />
             <InputRow label="Sasitron Gross Annual" value={sasitronGross} onChange={setSasitronGross} prefix="$" />
@@ -117,67 +137,117 @@ export default function BorrowingPage() {
             <InputRow label="72 Bagshaw Rent (annual)" value={rentalIncome72} onChange={setRentalIncome72} prefix="$" />
             <InputRow label="Monthly Living Expenses" value={monthlyExpenses} onChange={setMonthlyExpenses} prefix="$" />
             <InputRow label="Annual Existing Debt Payments" value={existingDebt} onChange={setExistingDebt} prefix="$" />
-
             <div className="border-t border-[var(--card-border)] pt-3 mt-3 space-y-2">
               <InfoRow label="Total Assessed Income" value={formatCurrency(totalAssessedIncome)} />
               <InfoRow label="(Rent shaded at 80%)" value={formatCurrency(totalRentalIncome)} muted />
               <InfoRow label="Assessment Rate" value={`${(assessmentRate * 100).toFixed(2)}% (best rate + ${assessmentBuffer}%)`} />
-              <InfoRow label="Max DSR (35%)" value={formatCurrency(totalAssessedIncome * dsrLimit)} />
+              <InfoRow label="DTI Ratio" value={`${(totalExistingDebt / totalGrossIncome).toFixed(1)}x (limit ~${dtiLimit}x)`} />
               <InfoRow label="Net Annual Surplus" value={formatCurrency(netSurplus)} positive={netSurplus > 0} />
             </div>
           </div>
         </div>
 
-        {/* New Property Scenario */}
+        {/* New Build Scenario */}
         <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-5">
-          <h3 className="font-semibold mb-4">Test a Property Purchase</h3>
-          <p className="text-xs text-[var(--muted)] mb-4">Enter a scenario to see if it works</p>
+          <h3 className="font-semibold mb-2">New Build Scenario</h3>
+          <p className="text-xs text-[var(--muted)] mb-4">Land + build package — stamp duty on land only</p>
           <div className="space-y-3">
-            <InputRow label="Property Price" value={newPropertyPrice} onChange={setNewPropertyPrice} prefix="$" />
-            <InputRow label="Deposit" value={newPropertyDeposit} onChange={setNewPropertyDeposit} suffix="%" />
+            <InputRow label="Land Price" value={landPrice} onChange={setLandPrice} prefix="$" />
+            <InputRow label="Build Cost" value={buildCost} onChange={setBuildCost} prefix="$" />
+            <InputRow label="Deposit" value={depositPercent} onChange={setDepositPercent} suffix="%" />
             <InputRow label="Interest Rate" value={newLoanRate} onChange={setNewLoanRate} suffix="%" step={0.05} />
             <InputRow label="Loan Term" value={newLoanTerm} onChange={setNewLoanTerm} suffix="years" />
             <InputRow label="Expected Weekly Rent" value={expectedRent} onChange={setExpectedRent} prefix="$" />
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-[var(--muted)]">Use equity for deposit</span>
+              <button onClick={() => setUseEquity(!useEquity)}
+                className={`px-3 py-1 rounded text-xs font-medium ${useEquity ? "bg-[var(--positive)]/20 text-[var(--positive)]" : "bg-[var(--card-border)] text-[var(--muted)]"}`}>
+                {useEquity ? "Yes" : "No"}
+              </button>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-[var(--muted)]">Claim NT BuildBonus $30K</span>
+              <button onClick={() => setClaimBuildBonus(!claimBuildBonus)}
+                className={`px-3 py-1 rounded text-xs font-medium ${claimBuildBonus ? "bg-[var(--positive)]/20 text-[var(--positive)]" : "bg-[var(--card-border)] text-[var(--muted)]"}`}>
+                {claimBuildBonus ? "Yes" : "No"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
 
-            <div className="border-t border-[var(--card-border)] pt-3 mt-3 space-y-2">
+      {/* Results */}
+      <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-5">
+        <h3 className="font-semibold mb-4">New Build Breakdown</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="space-y-2">
+            <h4 className="text-xs font-medium text-[var(--muted)] uppercase tracking-wide">Costs</h4>
+            <InfoRow label="Land" value={formatCurrency(landPrice)} />
+            <InfoRow label="Build" value={formatCurrency(buildCost)} />
+            <InfoRow label="Total Property Cost" value={formatCurrency(totalPropertyCost)} />
+            <InfoRow label="Stamp Duty (land only)" value={formatCurrency(stampDutyOnLand)} />
+            {claimBuildBonus && <InfoRow label="NT BuildBonus Grant" value={`-${formatCurrency(ntBuildBonus)}`} positive />}
+            <div className="border-t border-[var(--card-border)] pt-2">
+              <InfoRow label="Deposit ({depositPercent}%)" value={formatCurrency(depositAmount)} />
               <InfoRow label="Loan Amount" value={formatCurrency(newLoanAmount)} />
-              <InfoRow label="Deposit Required" value={formatCurrency(depositAmount)} />
-              <InfoRow label="NT Stamp Duty" value={formatCurrency(stampDutyNT)} />
-              <InfoRow label="Total Cash Required" value={formatCurrency(totalCashRequired)} />
               <InfoRow label="LVR" value={`${newLVR.toFixed(1)}%`} />
               {needsLMI && (
-                <div className="text-xs text-[var(--negative)] bg-[var(--negative)]/10 rounded px-2 py-1">
-                  LVR over 80% — Lenders Mortgage Insurance (LMI) will apply
+                <div className="text-xs text-[var(--negative)] bg-[var(--negative)]/10 rounded px-2 py-1 mt-1">
+                  LVR over 80% — LMI will apply
                 </div>
               )}
-              <InfoRow label="Monthly Repayment" value={formatCurrencyExact(newMonthlyRepayment)} />
-              <InfoRow label="Annual Repayment" value={formatCurrency(newAnnualRepayment)} />
-              <InfoRow label="Expected Annual Rent" value={formatCurrency(newAnnualRent)} positive />
-              <InfoRow label="Gross Yield" value={`${newGrossYield.toFixed(2)}%`} />
-              <InfoRow
-                label="Annual Cash Flow"
-                value={`${newCashFlow >= 0 ? "+" : ""}${formatCurrency(newCashFlow)}`}
-                positive={newCashFlow >= 0}
-              />
+            </div>
+          </div>
 
-              <div className={`mt-3 p-3 rounded text-sm font-medium text-center ${
+          <div className="space-y-2">
+            <h4 className="text-xs font-medium text-[var(--muted)] uppercase tracking-wide">Funding</h4>
+            <InfoRow label="Cash Required" value={formatCurrency(Math.max(0, totalCashNeeded))} />
+            {useEquity && <InfoRow label="Available Equity" value={formatCurrency(usableEquity)} positive />}
+            <InfoRow label="Offset Cash" value={formatCurrency(offsetCash)} positive />
+            <InfoRow label="Total Available" value={formatCurrency(totalAvailableFunds)} positive />
+            <div className="border-t border-[var(--card-border)] pt-2">
+              {fundingGap <= 0 ? (
+                <div className="p-2 rounded text-xs text-center bg-[var(--positive)]/10 text-[var(--positive)] border border-[var(--positive)]/30">
+                  Fully funded — {formatCurrency(Math.abs(fundingGap))} surplus
+                </div>
+              ) : (
+                <div className="p-2 rounded text-xs text-center bg-[var(--negative)]/10 text-[var(--negative)] border border-[var(--negative)]/30">
+                  Shortfall of {formatCurrency(fundingGap)}
+                </div>
+              )}
+            </div>
+            <div className="border-t border-[var(--card-border)] pt-2">
+              <div className={`p-2 rounded text-xs text-center ${
                 canAfford
                   ? "bg-[var(--positive)]/10 text-[var(--positive)] border border-[var(--positive)]/30"
                   : "bg-[var(--negative)]/10 text-[var(--negative)] border border-[var(--negative)]/30"
               }`}>
-                {canAfford
-                  ? `Within borrowing capacity (${formatCurrency(newLoanAmount)} < ${formatCurrency(maxLoanAmount)})`
-                  : `Exceeds borrowing capacity (${formatCurrency(newLoanAmount)} > ${formatCurrency(maxLoanAmount)})`}
+                {canAfford ? "Within borrowing capacity" : "Exceeds borrowing capacity"}
               </div>
-              {totalAvailableFunds >= totalCashRequired ? (
-                <div className="p-3 rounded text-sm text-center bg-[var(--positive)]/10 text-[var(--positive)] border border-[var(--positive)]/30">
-                  Sufficient funds for deposit + stamp duty ({formatCurrency(totalCashRequired)})
-                </div>
-              ) : (
-                <div className="p-3 rounded text-sm text-center bg-[var(--negative)]/10 text-[var(--negative)] border border-[var(--negative)]/30">
-                  Shortfall of {formatCurrency(totalCashRequired - totalAvailableFunds)} for deposit + stamp duty
-                </div>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <h4 className="text-xs font-medium text-[var(--muted)] uppercase tracking-wide">Cash Flow & Tax</h4>
+            <InfoRow label="Monthly Repayment" value={formatCurrencyExact(newMonthlyRepayment)} />
+            <InfoRow label="Annual Repayment" value={formatCurrency(newAnnualRepayment)} />
+            <InfoRow label="Annual Rent" value={formatCurrency(newAnnualRent)} positive />
+            <InfoRow label="Gross Yield" value={`${newGrossYield.toFixed(2)}%`} />
+            <InfoRow label="Cash Flow (before tax)" value={`${newCashFlow >= 0 ? "+" : ""}${formatCurrency(newCashFlow)}/yr`}
+              positive={newCashFlow >= 0} />
+            <div className="border-t border-[var(--card-border)] pt-2">
+              <InfoRow label="Depreciation Saving" value={`${formatCurrency(depreciationTaxSaving)}/yr`} positive />
+              {negGearingTaxSaving > 0 && (
+                <InfoRow label="Neg. Gearing Saving" value={`${formatCurrency(negGearingTaxSaving)}/yr`} positive />
               )}
+              <InfoRow label="Total Tax Benefits" value={`${formatCurrency(totalTaxBenefits)}/yr`} positive />
+              <InfoRow label="After-Tax Cash Flow" value={`${formatCurrency(newCashFlow + totalTaxBenefits)}/yr`}
+                positive={newCashFlow + totalTaxBenefits >= 0} />
+              <InfoRow label="Weekly Out-of-Pocket" value={
+                newCashFlow + totalTaxBenefits >= 0
+                  ? `+${formatCurrency((newCashFlow + totalTaxBenefits) / 52)}/wk`
+                  : `${formatCurrency((newCashFlow + totalTaxBenefits) / 52)}/wk`
+              } positive={newCashFlow + totalTaxBenefits >= 0} />
             </div>
           </div>
         </div>
@@ -185,7 +255,11 @@ export default function BorrowingPage() {
 
       {/* Equity Breakdown */}
       <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-5">
-        <h3 className="font-semibold mb-4">Equity Breakdown by Property</h3>
+        <h3 className="font-semibold mb-4">Equity Breakdown — How Equity Release Works</h3>
+        <p className="text-sm text-[var(--muted)] mb-4">
+          Banks will lend up to 80% of your property&apos;s value. The gap between 80% and your current loan is equity you can access
+          as a deposit for a new property — without selling.
+        </p>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -193,8 +267,8 @@ export default function BorrowingPage() {
                 <th className="pb-2 font-medium">Property</th>
                 <th className="pb-2 font-medium text-right">Value</th>
                 <th className="pb-2 font-medium text-right">Loan</th>
-                <th className="pb-2 font-medium text-right">Equity</th>
-                <th className="pb-2 font-medium text-right">80% Value</th>
+                <th className="pb-2 font-medium text-right">Total Equity</th>
+                <th className="pb-2 font-medium text-right">80% of Value</th>
                 <th className="pb-2 font-medium text-right">Usable Equity</th>
               </tr>
             </thead>
@@ -207,21 +281,35 @@ export default function BorrowingPage() {
                 const usable = Math.max(0, eighty - bal);
                 return (
                   <tr key={p.id} className="border-t border-[var(--card-border)]">
-                    <td className="py-2">{p.address}</td>
+                    <td className="py-2">
+                      <div>{p.address}</div>
+                      <div className="text-xs text-[var(--muted)]">{p.owner}</div>
+                    </td>
                     <td className="py-2 text-right">{formatCurrency(p.currentValue)}</td>
                     <td className="py-2 text-right">{formatCurrency(bal)}</td>
                     <td className="py-2 text-right text-[var(--positive)]">{formatCurrency(eq)}</td>
                     <td className="py-2 text-right">{formatCurrency(eighty)}</td>
-                    <td className="py-2 text-right text-[var(--positive)]">{formatCurrency(usable)}</td>
+                    <td className="py-2 text-right text-[var(--positive)] font-semibold">{formatCurrency(usable)}</td>
                   </tr>
                 );
               })}
+              <tr className="border-t-2 border-[var(--card-border)] font-semibold">
+                <td className="py-2">Total</td>
+                <td className="py-2 text-right">{formatCurrency(properties.reduce((s, p) => s + p.currentValue, 0))}</td>
+                <td className="py-2 text-right">{formatCurrency(loans.reduce((s, l) => s + l.balance, 0))}</td>
+                <td className="py-2 text-right text-[var(--positive)]">
+                  {formatCurrency(properties.reduce((s, p) => s + p.currentValue, 0) - loans.reduce((s, l) => s + l.balance, 0))}
+                </td>
+                <td className="py-2 text-right">{formatCurrency(properties.reduce((s, p) => s + p.currentValue * 0.8, 0))}</td>
+                <td className="py-2 text-right text-[var(--positive)]">{formatCurrency(usableEquity)}</td>
+              </tr>
             </tbody>
           </table>
         </div>
-        <p className="text-xs text-[var(--muted)] mt-3">
-          Usable equity = 80% of property value minus loan balance. Banks typically lend up to 80% LVR without LMI.
-        </p>
+        <div className="mt-4 p-3 rounded bg-[var(--accent)]/5 border border-[var(--accent)]/30 text-sm text-[var(--muted)]">
+          <strong className="text-[var(--accent)]">Your strategy:</strong> Release {formatCurrency(usableEquity)} in usable equity + {formatCurrency(offsetCash)} offset cash
+          = {formatCurrency(usableEquity + offsetCash)} available for your next property deposit without selling anything.
+        </div>
       </div>
 
       <p className="text-xs text-[var(--muted)] text-center">
@@ -231,15 +319,11 @@ export default function BorrowingPage() {
   );
 }
 
-// NT Stamp Duty Calculator (simplified)
-function calculateNTStampDuty(price: number): number {
-  if (price <= 525000) {
-    // Simplified: ~4.95% for properties under $525k
-    return price * 0.0495;
-  } else if (price <= 3000000) {
-    return price * 0.0495 + (price - 525000) * 0.005;
-  }
-  return price * 0.0595;
+function calculateNTStampDuty(landPrice: number): number {
+  // NT stamp duty on land only for new builds
+  if (landPrice <= 525000) return landPrice * 0.0495;
+  if (landPrice <= 3000000) return 525000 * 0.0495 + (landPrice - 525000) * 0.055;
+  return landPrice * 0.0595;
 }
 
 function InputRow({ label, value, onChange, prefix, suffix, step }: {
@@ -251,13 +335,9 @@ function InputRow({ label, value, onChange, prefix, suffix, step }: {
       <label className="text-sm text-[var(--muted)] shrink-0">{label}</label>
       <div className="flex items-center gap-1">
         {prefix && <span className="text-sm text-[var(--muted)]">{prefix}</span>}
-        <input
-          type="number"
-          value={value}
-          step={step}
+        <input type="number" value={value} step={step}
           onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
-          className="bg-[var(--background)] border border-[var(--card-border)] rounded px-2 py-1.5 text-sm text-right w-32 focus:border-[var(--accent)] outline-none"
-        />
+          className="bg-[var(--background)] border border-[var(--card-border)] rounded px-2 py-1.5 text-sm text-right w-32 focus:border-[var(--accent)] outline-none" />
         {suffix && <span className="text-sm text-[var(--muted)]">{suffix}</span>}
       </div>
     </div>
