@@ -1,23 +1,27 @@
 "use client";
 
 import { useState } from "react";
-import { properties as defaultProperties, loans as defaultLoans, formatCurrency, formatCurrencyExact, type Property, type Loan } from "@/lib/data";
+import Image from "next/image";
+import { formatCurrency, formatCurrencyExact, type Property, type Loan } from "@/lib/data";
+import { useProperties, useLoans } from "@/lib/useData";
 
 export default function PropertiesPage() {
-  const [propertyData, setPropertyData] = useState<Property[]>(defaultProperties);
-  const [loanData, setLoanData] = useState<Loan[]>(defaultLoans);
+  const { properties: propertyData, saveProperty, loaded: pLoaded } = useProperties();
+  const { loans: loanData, saveLoan, loaded: lLoaded } = useLoans();
   const [editing, setEditing] = useState<string | null>(null);
 
-  function updateProperty(id: string, field: keyof Property, value: string | number) {
-    setPropertyData((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, [field]: value } : p))
-    );
+  if (!pLoaded || !lLoaded) {
+    return <div className="text-center text-[var(--muted)] py-20">Loading...</div>;
   }
 
-  function updateLoan(id: string, field: keyof Loan, value: string | number) {
-    setLoanData((prev) =>
-      prev.map((l) => (l.propertyId === id ? { ...l, [field]: value } : l))
-    );
+  function updateProperty(id: string, field: keyof Property, value: string | number) {
+    const prop = propertyData.find((p) => p.id === id);
+    if (prop) saveProperty({ ...prop, [field]: value });
+  }
+
+  function updateLoan(propertyId: string, field: keyof Loan, value: string | number) {
+    const loan = loanData.find((l) => l.propertyId === propertyId);
+    if (loan) saveLoan({ ...loan, [field]: value });
   }
 
   function getLoan(propertyId: string) {
@@ -38,7 +42,16 @@ export default function PropertiesPage() {
         const isEditing = editing === property.id;
 
         return (
-          <div key={property.id} className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-6">
+          <div key={property.id} className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] overflow-hidden">
+            <div className="relative h-56 w-full">
+              <Image
+                src={property.image}
+                alt={property.address}
+                fill
+                className="object-cover"
+              />
+            </div>
+            <div className="p-6">
             <div className="flex items-start justify-between mb-4">
               <div>
                 <h3 className="text-xl font-bold">{property.address}</h3>
@@ -69,12 +82,15 @@ export default function PropertiesPage() {
                 <div className="space-y-2">
                   <EditableRow label="Property Type" value={property.propertyType} editing={isEditing}
                     onChange={(v) => updateProperty(property.id, "propertyType", v)} />
-                  <EditableRow label="Bedrooms" value={property.bedrooms?.toString() ?? "—"} editing={isEditing}
-                    onChange={(v) => updateProperty(property.id, "bedrooms", Number(v))} />
-                  <EditableRow label="Bathrooms" value={property.bathrooms?.toString() ?? "—"} editing={isEditing}
-                    onChange={(v) => updateProperty(property.id, "bathrooms", Number(v))} />
-                  <EditableRow label="Car Spaces" value={property.carSpaces?.toString() ?? "—"} editing={isEditing}
-                    onChange={(v) => updateProperty(property.id, "carSpaces", Number(v))} />
+                  <EditableRow label="Bedrooms" value={property.bedrooms != null ? String(property.bedrooms) : ""} editing={isEditing}
+                    placeholder="—"
+                    onChange={(v) => updateProperty(property.id, "bedrooms", v === "" ? 0 : Number(v))} />
+                  <EditableRow label="Bathrooms" value={property.bathrooms != null ? String(property.bathrooms) : ""} editing={isEditing}
+                    placeholder="—"
+                    onChange={(v) => updateProperty(property.id, "bathrooms", v === "" ? 0 : Number(v))} />
+                  <EditableRow label="Car Spaces" value={property.carSpaces != null ? String(property.carSpaces) : ""} editing={isEditing}
+                    placeholder="—"
+                    onChange={(v) => updateProperty(property.id, "carSpaces", v === "" ? 0 : Number(v))} />
                   <EditableRow label="Land Size" value={property.landSize} editing={isEditing}
                     onChange={(v) => updateProperty(property.id, "landSize", v)} />
                 </div>
@@ -144,6 +160,7 @@ export default function PropertiesPage() {
                 )}
               </div>
             </div>
+            </div>
           </div>
         );
       })}
@@ -160,10 +177,11 @@ function Row({ label, value, positive }: { label: string; value: string; positiv
   );
 }
 
-function EditableRow({ label, value, editing, onChange, suffix }: {
-  label: string; value: string; editing: boolean; onChange: (v: string) => void; suffix?: string;
+function EditableRow({ label, value, editing, onChange, suffix, placeholder }: {
+  label: string; value: string; editing: boolean; onChange: (v: string) => void; suffix?: string; placeholder?: string;
 }) {
-  if (!editing) return <Row label={label} value={suffix ? `${value}${suffix}` : value} />;
+  const display = value || placeholder || "—";
+  if (!editing) return <Row label={label} value={suffix ? `${display}${suffix}` : display} />;
   return (
     <div className="flex justify-between items-center py-1">
       <span className="text-sm text-[var(--muted)]">{label}</span>
@@ -171,6 +189,7 @@ function EditableRow({ label, value, editing, onChange, suffix }: {
         <input
           type="text"
           value={value}
+          placeholder={placeholder}
           onChange={(e) => onChange(e.target.value)}
           className="bg-[var(--background)] border border-[var(--card-border)] rounded px-2 py-1 text-sm text-right w-32 focus:border-[var(--accent)] outline-none"
         />
@@ -184,6 +203,7 @@ function EditableNumberRow({ label, value, editing, onChange, exact }: {
   label: string; value: number; editing: boolean; onChange: (v: number) => void; exact?: boolean;
 }) {
   if (!editing) return <Row label={label} value={exact ? formatCurrencyExact(value) : formatCurrency(value)} />;
+  const displayValue = Math.round(value * 100) / 100;
   return (
     <div className="flex justify-between items-center py-1">
       <span className="text-sm text-[var(--muted)]">{label}</span>
@@ -191,7 +211,8 @@ function EditableNumberRow({ label, value, editing, onChange, exact }: {
         <span className="text-sm text-[var(--muted)]">$</span>
         <input
           type="number"
-          value={value}
+          step="0.01"
+          value={displayValue}
           onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
           className="bg-[var(--background)] border border-[var(--card-border)] rounded px-2 py-1 text-sm text-right w-32 focus:border-[var(--accent)] outline-none"
         />

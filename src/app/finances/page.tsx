@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useRef, useCallback } from "react";
 import {
-  incomes as defaultIncomes,
   defaultExpenses,
   formatCurrency,
   formatCurrencyExact,
@@ -11,63 +10,55 @@ import {
   type Income,
   type Expense,
 } from "@/lib/data";
-
-const STORAGE_KEY = "propfolio-expenses";
+import { useIncomes, useExpenses } from "@/lib/useData";
 
 const categories = ["Housing", "Transport", "Living", "Investment", "Other"];
 const frequencies = ["weekly", "fortnightly", "monthly", "quarterly", "annually"] as const;
 
 export default function FinancesPage() {
   const [activeTab, setActiveTab] = useState<"income" | "expenses">("income");
-  const [incomeData, setIncomeData] = useState<Income[]>(defaultIncomes);
+  const { incomes: incomeData, saveIncome, loaded: iLoaded } = useIncomes();
+  const { expenses, setExpenses, saveAll: saveExpenses, loaded } = useExpenses();
   const [editingIncome, setEditingIncome] = useState<string | null>(null);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  const saveTimer = useRef<ReturnType<typeof setTimeout>>(null);
 
-  // Load expenses from localStorage
-  useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      setExpenses(JSON.parse(saved));
-    } else {
-      setExpenses(defaultExpenses);
-    }
-    setLoaded(true);
-  }, []);
+  // Debounced save for expenses
+  const debouncedSaveExpenses = useCallback((updated: Expense[]) => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => saveExpenses(updated), 1000);
+  }, [saveExpenses]);
 
-  // Save expenses to localStorage
-  useEffect(() => {
-    if (loaded) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(expenses));
-    }
-  }, [expenses, loaded]);
+  if (!loaded || !iLoaded) {
+    return <div className="text-center text-[var(--muted)] py-20">Loading...</div>;
+  }
 
   function updateIncome(id: string, field: keyof Income, value: string | number) {
-    setIncomeData((prev) =>
-      prev.map((i) => (i.id === id ? { ...i, [field]: value } : i))
-    );
+    const income = incomeData.find((i) => i.id === id);
+    if (income) saveIncome({ ...income, [field]: value });
   }
 
   function updateExpense(id: string, field: keyof Expense, value: string | number) {
-    setExpenses((prev) =>
-      prev.map((e) => (e.id === id ? { ...e, [field]: value } : e))
-    );
+    const updated = expenses.map((e) => (e.id === id ? { ...e, [field]: value } : e));
+    setExpenses(updated);
+    debouncedSaveExpenses(updated);
   }
 
   function addExpense() {
     const newId = Date.now().toString();
-    setExpenses((prev) => [
-      ...prev,
-      { id: newId, category: "Other", description: "", amount: 0, frequency: "monthly" },
-    ]);
+    const updated = [...expenses, { id: newId, category: "Other" as const, description: "", amount: 0, frequency: "monthly" as const }];
+    setExpenses(updated);
+    debouncedSaveExpenses(updated);
   }
 
   function removeExpense(id: string) {
-    setExpenses((prev) => prev.filter((e) => e.id !== id));
+    const updated = expenses.filter((e) => e.id !== id);
+    setExpenses(updated);
+    saveExpenses(updated);
   }
 
   function resetExpenses() {
     setExpenses(defaultExpenses);
+    saveExpenses(defaultExpenses);
   }
 
   const totalMonthlyExpenses = expenses.reduce(
@@ -360,7 +351,7 @@ function EditableNumRow({ label, value, editing, onChange, positive }: {
         <input
           type="number"
           step="0.01"
-          value={value}
+          value={Math.round(value * 100) / 100}
           onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
           className="bg-[var(--background)] border border-[var(--card-border)] rounded px-2 py-1 text-sm text-right w-28 focus:border-[var(--accent)] outline-none"
         />
