@@ -1,8 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
-
-const STORAGE_KEY = "propfolio-documents";
+import { useState, useEffect, useRef, useCallback } from "react";
 
 interface Document {
   id: string;
@@ -125,35 +123,45 @@ export default function DocumentsPage() {
   const [loaded, setLoaded] = useState(false);
   const [filterPerson, setFilterPerson] = useState<string>("All");
   const [filterStatus, setFilterStatus] = useState<string>("All");
+  const saveTimer = useRef<ReturnType<typeof setTimeout>>(null);
 
-  useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      setDocuments(JSON.parse(saved));
-    } else {
-      setDocuments(createDefaultDocuments());
-    }
-    setLoaded(true);
+  const saveDocuments = useCallback(async (docs: Document[]) => {
+    await fetch("/api/documents", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(docs),
+    }).catch(() => {});
   }, []);
 
   useEffect(() => {
-    if (loaded) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(documents));
-    }
-  }, [documents, loaded]);
+    fetch("/api/documents")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.length > 0) setDocuments(d);
+        else setDocuments(createDefaultDocuments());
+        setLoaded(true);
+      })
+      .catch(() => {
+        setDocuments(createDefaultDocuments());
+        setLoaded(true);
+      });
+  }, []);
 
   function updateDoc(id: string, field: keyof Document, value: string) {
-    setDocuments((prev) =>
-      prev.map((d) =>
-        d.id === id
-          ? { ...d, [field]: value, lastUpdated: field === "status" ? new Date().toISOString().split("T")[0] : d.lastUpdated }
-          : d
-      )
+    const updated = documents.map((d) =>
+      d.id === id
+        ? { ...d, [field]: value, lastUpdated: field === "status" ? new Date().toISOString().split("T")[0] : d.lastUpdated }
+        : d
     );
+    setDocuments(updated);
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => saveDocuments(updated), 1000);
   }
 
   function resetAll() {
-    setDocuments(createDefaultDocuments());
+    const defaults = createDefaultDocuments();
+    setDocuments(defaults);
+    saveDocuments(defaults);
   }
 
   const totalDocs = documents.length;

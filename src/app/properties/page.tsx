@@ -2,23 +2,26 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { properties as defaultProperties, loans as defaultLoans, formatCurrency, formatCurrencyExact, type Property, type Loan } from "@/lib/data";
+import { formatCurrency, formatCurrencyExact, type Property, type Loan } from "@/lib/data";
+import { useProperties, useLoans } from "@/lib/useData";
 
 export default function PropertiesPage() {
-  const [propertyData, setPropertyData] = useState<Property[]>(defaultProperties);
-  const [loanData, setLoanData] = useState<Loan[]>(defaultLoans);
+  const { properties: propertyData, saveProperty, loaded: pLoaded } = useProperties();
+  const { loans: loanData, saveLoan, loaded: lLoaded } = useLoans();
   const [editing, setEditing] = useState<string | null>(null);
 
-  function updateProperty(id: string, field: keyof Property, value: string | number) {
-    setPropertyData((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, [field]: value } : p))
-    );
+  if (!pLoaded || !lLoaded) {
+    return <div className="text-center text-[var(--muted)] py-20">Loading...</div>;
   }
 
-  function updateLoan(id: string, field: keyof Loan, value: string | number) {
-    setLoanData((prev) =>
-      prev.map((l) => (l.propertyId === id ? { ...l, [field]: value } : l))
-    );
+  function updateProperty(id: string, field: keyof Property, value: string | number) {
+    const prop = propertyData.find((p) => p.id === id);
+    if (prop) saveProperty({ ...prop, [field]: value });
+  }
+
+  function updateLoan(propertyId: string, field: keyof Loan, value: string | number) {
+    const loan = loanData.find((l) => l.propertyId === propertyId);
+    if (loan) saveLoan({ ...loan, [field]: value });
   }
 
   function getLoan(propertyId: string) {

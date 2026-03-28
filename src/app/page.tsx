@@ -2,9 +2,22 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { properties, loans, incomes, formatCurrency, getLoanForProperty } from "@/lib/data";
+import { formatCurrency } from "@/lib/data";
+import { useProperties, useLoans, useIncomes } from "@/lib/useData";
 
 export default function Dashboard() {
+  const { properties, loaded: pLoaded } = useProperties();
+  const { loans, loaded: lLoaded } = useLoans();
+  const { incomes, loaded: iLoaded } = useIncomes();
+
+  if (!pLoaded || !lLoaded || !iLoaded) {
+    return <div className="text-center text-[var(--muted)] py-20">Loading...</div>;
+  }
+
+  function getLoanForProperty(propertyId: string) {
+    return loans.find((l) => l.propertyId === propertyId);
+  }
+
   const totalValue = properties.reduce((sum, p) => sum + p.currentValue, 0);
   const totalMortgage = loans.reduce((sum, l) => sum + l.balance, 0);
   const totalEquity = totalValue - totalMortgage;
