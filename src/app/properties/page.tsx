@@ -203,6 +203,7 @@ function EditableNumberRow({ label, value, editing, onChange, exact }: {
   label: string; value: number; editing: boolean; onChange: (v: number) => void; exact?: boolean;
 }) {
   if (!editing) return <Row label={label} value={exact ? formatCurrencyExact(value) : formatCurrency(value)} />;
+  const displayValue = Math.round(value * 100) / 100;
   return (
     <div className="flex justify-between items-center py-1">
       <span className="text-sm text-[var(--muted)]">{label}</span>
@@ -210,7 +211,8 @@ function EditableNumberRow({ label, value, editing, onChange, exact }: {
         <span className="text-sm text-[var(--muted)]">$</span>
         <input
           type="number"
-          value={value}
+          step="0.01"
+          value={displayValue}
           onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
           className="bg-[var(--background)] border border-[var(--card-border)] rounded px-2 py-1 text-sm text-right w-32 focus:border-[var(--accent)] outline-none"
         />

@@ -7,7 +7,7 @@ interface Document {
   category: string;
   name: string;
   description: string;
-  status: "missing" | "have" | "expired" | "requested";
+  status: "missing" | "have" | "expired" | "requested" | "n/a";
   notes: string;
   lastUpdated: string;
   forPerson: "Stuart" | "Sasitron" | "Both" | "Property";
@@ -235,7 +235,7 @@ export default function DocumentsPage() {
         </div>
         <div className="flex items-center gap-2">
           <span className="text-sm text-[var(--muted)]">Status:</span>
-          {["All", "missing", "have", "expired", "requested"].map((s) => (
+          {["All", "missing", "have", "expired", "requested", "n/a"].map((s) => (
             <button key={s} onClick={() => setFilterStatus(s)}
               className={`text-xs px-3 py-1 rounded border transition-colors capitalize ${
                 filterStatus === s
@@ -307,6 +307,8 @@ export default function DocumentsPage() {
                             ? "bg-[var(--negative)]/20 border-[var(--negative)]/30 text-[var(--negative)]"
                             : doc.status === "expired"
                             ? "bg-yellow-500/20 border-yellow-500/30 text-yellow-500"
+                            : doc.status === "n/a"
+                            ? "bg-[var(--card-border)] border-[var(--card-border)] text-[var(--muted)]"
                             : "bg-[var(--accent)]/20 border-[var(--accent)]/30 text-[var(--accent)]"
                         }`}
                       >
@@ -314,6 +316,7 @@ export default function DocumentsPage() {
                         <option value="have">Have</option>
                         <option value="expired">Expired</option>
                         <option value="requested">Requested</option>
+                        <option value="n/a">N/A</option>
                       </select>
                     </div>
                   </div>

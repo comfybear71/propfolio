@@ -351,7 +351,7 @@ function EditableNumRow({ label, value, editing, onChange, positive }: {
         <input
           type="number"
           step="0.01"
-          value={value}
+          value={Math.round(value * 100) / 100}
           onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
           className="bg-[var(--background)] border border-[var(--card-border)] rounded px-2 py-1 text-sm text-right w-28 focus:border-[var(--accent)] outline-none"
         />
