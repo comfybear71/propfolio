@@ -54,15 +54,36 @@ propfolio/
 - **Stamp duty on land only** for new builds in the NT (not on the build cost)
 - Two owners: Stuart French (60 Bagshaw) and Sasitron Ransuk (72 Bagshaw), both in Gray, NT
 
+## Investment Strategy (IMPORTANT — read this)
+The users' strategy for building their portfolio:
+
+1. **Room rentals, not whole-house:** They rent out individual rooms (not the whole property). New builds will be 4-bed ensuite houses. They live in one room and rent out 3 rooms at ~$350/wk each = **$1,050/wk** per property.
+
+2. **Offset account strategy:** Every dollar of income (wages + rent) goes into offset accounts:
+   - Sasitron's 72 Bagshaw offset is at ~62% ($236K of $378K). Will hit 100% in 12-18 months.
+   - Stuart's 60 Bagshaw redraw is at ~11%. Will hit ~50% in 12 months.
+   - Once a property is 100% offset, all income shifts to the NEXT property's offset.
+
+3. **Equity release for deposits:** They plan to release ~$100K each from existing properties (80% LVR) to fund deposits on new builds. NOT selling properties.
+
+4. **Construction loans in Australia:** During the 12-18 month build period, you only pay interest on amounts drawn down (progress payments). Full P&I repayments don't start until the build is complete and the certificate of occupancy is issued.
+
+5. **NT BuildBonus $30K:** Each new build in the NT qualifies for a $30,000 government grant.
+
+6. **Stamp duty on land only:** For new builds in the NT, stamp duty is calculated on the land price only, not the build cost.
+
+7. **5-year plan:** Buy as many properties as possible over 5 years, using equity from each purchase to fund the next.
+
 ## Current State
 - Full multi-page dashboard with real financial data for 2 Darwin properties
 - 7 pages: Dashboard, Properties, Finances, Borrowing, Strategy, Documents, Tax Guide
-- Editable fields throughout — expenses save to localStorage
+- Editable fields throughout — expenses save to MongoDB
+- MongoDB connected for persistent data storage
+- Vercel Blob Storage connected for document uploads (private)
 - Borrowing calculator focused on new builds with equity release + $30K grant
 - 5-year portfolio growth planner
-- Document vault with broker checklist
-- No database connected yet — data hardcoded in `src/lib/data.ts`, expenses in localStorage
-- MongoDB planned for persistent storage
+- Document vault with broker checklist + file upload
+- Offset/debt reduction strategy tracker on dashboard
 
 ## Planned Phases (from README)
 - **Phase 1:** Property listing, value tracking, equity calculator, rental income, dashboard ✅

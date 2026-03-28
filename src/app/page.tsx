@@ -59,7 +59,7 @@ export default function Dashboard() {
   const repaymentAt20 = newLoanAt20 > 0
     ? (newLoanAt20 * monthlyRate * Math.pow(1 + monthlyRate, numPayments)) / (Math.pow(1 + monthlyRate, numPayments) - 1)
     : 0;
-  const estNewRentWeekly = 600;
+  const estNewRentWeekly = 1050; // 3 rooms x $350/wk
   const estAnnualRent = estNewRentWeekly * 52;
   const cashFlowAt20 = estAnnualRent - (repaymentAt20 * 12);
 
@@ -140,7 +140,7 @@ export default function Dashboard() {
 
         {/* The scenario */}
         <div className="rounded-lg border border-[var(--positive)]/30 bg-[var(--positive)]/5 p-5 mb-4">
-          <div className="text-sm font-medium mb-3">Example: Release $100K Each → Buy a $1M New Build</div>
+          <div className="text-sm font-medium mb-3">Example: Release $100K Each → Buy a $1M New Build (rent 3 rooms @ $350/wk)</div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
             <div className="space-y-2">
               <div className="text-xs font-medium text-[var(--muted)] uppercase tracking-wide">Step 1: Get Deposit</div>
@@ -192,6 +192,117 @@ export default function Dashboard() {
             <div>- Gather all documents early (see Documents page)</div>
             <div>- New builds get $30K grant + full depreciation benefits</div>
             <div>- Stamp duty on land only for new builds in NT</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Offset Strategy Tracker */}
+      <div>
+        <h3 className="text-lg font-semibold mb-4">Offset & Debt Reduction Strategy</h3>
+        <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-5">
+          <p className="text-sm text-[var(--muted)] mb-4">
+            Every dollar into offset/redraw saves interest. Once Sasitron&apos;s loan is 100% offset, all income shifts to the next property&apos;s offset.
+          </p>
+
+          {/* Progress bars for each property */}
+          {properties.map((p) => {
+            const loan = loans.find((l) => l.propertyId === p.id);
+            if (!loan) return null;
+            const bal = loan.balance;
+            const offsetOrRedraw = loan.offsetBalance > 0 ? loan.offsetBalance : loan.availableRedraw;
+            const offsetPct = Math.min(100, (offsetOrRedraw / bal) * 100);
+            const interestPaidOn = Math.max(0, bal - offsetOrRedraw);
+            const annualInterestSaved = offsetOrRedraw * (loan.interestRate / 100);
+            const annualInterestPaying = interestPaidOn * (loan.interestRate / 100);
+            const label = loan.offsetBalance > 0 ? "Offset" : "Redraw";
+            const isComplete = offsetPct >= 100;
+
+            return (
+              <div key={p.id} className="mb-5 last:mb-0">
+                <div className="flex items-center justify-between mb-1">
+                  <div>
+                    <span className="text-sm font-medium">{p.address}</span>
+                    <span className="text-xs text-[var(--muted)] ml-2">({p.owner})</span>
+                  </div>
+                  <span className={`text-sm font-bold ${isComplete ? "text-[var(--positive)]" : ""}`}>
+                    {offsetPct.toFixed(0)}% {label}
+                  </span>
+                </div>
+                <div className="w-full bg-[var(--card-border)] rounded-full h-4 mb-2">
+                  <div
+                    className={`h-4 rounded-full transition-all ${isComplete ? "bg-[var(--positive)]" : "bg-[var(--accent)]"}`}
+                    style={{ width: `${Math.min(100, offsetPct)}%` }}
+                  />
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                  <div>
+                    <span className="text-[var(--muted)]">Loan: </span>
+                    <span>{formatCurrency(bal)}</span>
+                  </div>
+                  <div>
+                    <span className="text-[var(--muted)]">{label}: </span>
+                    <span className="text-[var(--positive)]">{formatCurrency(offsetOrRedraw)}</span>
+                  </div>
+                  <div>
+                    <span className="text-[var(--muted)]">Paying interest on: </span>
+                    <span>{formatCurrency(interestPaidOn)}</span>
+                  </div>
+                  <div>
+                    <span className="text-[var(--muted)]">Interest saved: </span>
+                    <span className="text-[var(--positive)]">{formatCurrency(annualInterestSaved)}/yr</span>
+                  </div>
+                </div>
+                {!isComplete && (
+                  <div className="text-xs text-[var(--muted)] mt-1">
+                    Still paying {formatCurrency(annualInterestPaying)}/yr interest — need {formatCurrency(bal - offsetOrRedraw)} more in {label.toLowerCase()} to reach 100%
+                  </div>
+                )}
+                {isComplete && (
+                  <div className="text-xs text-[var(--positive)] mt-1 font-medium">
+                    100% offset — effectively paying $0 interest on this loan
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {/* Combined monthly income available to offset */}
+          <div className="mt-4 pt-4 border-t border-[var(--card-border)]">
+            <div className="text-sm font-medium mb-2">Cash Flow Into Offset</div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+              <div className="space-y-1">
+                <div className="flex justify-between"><span className="text-[var(--muted)]">Stuart net pay</span><span>{formatCurrency(incomes[0]?.netFortnightly * 26)}/yr</span></div>
+                <div className="flex justify-between"><span className="text-[var(--muted)]">Sasitron net pay</span><span>{formatCurrency(incomes[1]?.netFortnightly * 26)}/yr</span></div>
+                <div className="flex justify-between"><span className="text-[var(--muted)]">60 Bagshaw rent</span><span>{formatCurrency(properties[0]?.weeklyRent * 52)}/yr</span></div>
+                <div className="flex justify-between"><span className="text-[var(--muted)]">72 Bagshaw rent</span><span>{formatCurrency(properties[1]?.weeklyRent * 52)}/yr</span></div>
+                <div className="flex justify-between font-semibold border-t border-[var(--card-border)] pt-1">
+                  <span>Total income</span><span className="text-[var(--positive)]">{formatCurrency(totalAnnualNetIncome + annualRentalIncome)}/yr</span>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <div className="flex justify-between"><span className="text-[var(--muted)]">60 Bagshaw repayment</span><span>-{formatCurrency(loans[0]?.repaymentAmount * (loans[0]?.repaymentFrequency === "fortnightly" ? 26 : 12))}/yr</span></div>
+                <div className="flex justify-between"><span className="text-[var(--muted)]">72 Bagshaw repayment</span><span>-{formatCurrency(loans[1]?.repaymentAmount * (loans[1]?.repaymentFrequency === "fortnightly" ? 26 : 12))}/yr</span></div>
+                <div className="flex justify-between"><span className="text-[var(--muted)]">Est. living expenses</span><span>-{formatCurrency(60000)}/yr</span></div>
+                <div className="flex justify-between font-semibold border-t border-[var(--card-border)] pt-1">
+                  <span>Surplus to offset</span>
+                  <span className="text-[var(--positive)]">
+                    ~{formatCurrency(
+                      totalAnnualNetIncome + annualRentalIncome
+                      - loans.reduce((s, l) => s + l.repaymentAmount * (l.repaymentFrequency === "fortnightly" ? 26 : 12), 0)
+                      - 60000
+                    )}/yr
+                  </span>
+                </div>
+              </div>
+            </div>
+            <p className="text-xs text-[var(--muted)] mt-3">
+              At this rate, every {formatCurrency(
+                (totalAnnualNetIncome + annualRentalIncome
+                - loans.reduce((s, l) => s + l.repaymentAmount * (l.repaymentFrequency === "fortnightly" ? 26 : 12), 0)
+                - 60000) / 12
+              )}/month goes straight into building your offset position.
+              Once a property hits 100% offset, that interest saving accelerates the next property even faster.
+            </p>
           </div>
         </div>
       </div>
