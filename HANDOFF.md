@@ -5,18 +5,18 @@
 ---
 
 ## Last Updated
-2026-03-28
+2026-04-08
 
 ## Last Session Summary
-- Scaffolded Next.js 16 + Tailwind CSS 4 application
-- Built full multi-page portfolio dashboard with REAL financial data
-- Created 4 pages: Dashboard, Properties, Finances, Borrowing
-- All values are editable in the UI — expenses save to localStorage
-- Fixed Vercel deployment issues (404 + output directory error)
-- Created `docs/`, `CLAUDE.md`, and `HANDOFF.md`
+- Added Discover page with Tinder-style property swipe UI (4 tabs: Swipe, Add Property, Search API, Watchlist)
+- Created MongoDB-backed API routes: `/api/discover`, `/api/watchlist`, `/api/domain-search`
+- Domain API proxy route ready for DOMAIN_API_KEY env var (user signing up at developer.domain.com.au)
+- Yield calculation, affordability check, NT BuildBonus + stamp duty on land only built into swipe cards
+- Added Discover to navigation bar
+- Previous sessions: full dashboard, MongoDB, Vercel Blob, 7+ pages all working
 
 ## Current Branch
-`claude/new-session-1Sz2q`
+`claude/review-handoff-docs-k5qX2`
 
 ## Owners
 - **Stuart French** — 60 Bagshaw Cres, Gray NT 0830 (PPOR)
@@ -40,20 +40,17 @@
 - Vercel builds successfully
 
 ## What's Not Done Yet
-- No database (Supabase) — property/loan/income data hardcoded in `src/lib/data.ts`, expenses in localStorage
 - No authentication
 - No charts (Recharts not yet installed)
-- Expense data entered via forms doesn't persist to a database yet
-- Property/income edits are session-only (reset on page refresh) — need Supabase for persistence
-- No document upload (payslips, bank statements, contracts)
-- Phase 2 & 3 features from README not fully started
+- Domain API key not yet configured (user signing up)
+- Roadmap page still has older version (Northcrest strategy update pending)
 
 ## Immediate Next Steps
-1. User to test and merge `claude/new-session-1Sz2q` into `main` (Vercel deploys from `main`)
-2. Set up Supabase project and connect database for persistent data storage
-3. Add authentication (Supabase Auth) to protect private financial data
+1. User to test and merge `claude/review-handoff-docs-k5qX2` into `master` (Vercel deploys from `master`)
+2. Add DOMAIN_API_KEY to Vercel environment variables once Domain developer account is set up
+3. Update Roadmap page with Northcrest strategy
 4. Add charts/graphs (Recharts) for value trends, cash flow visualisation
-5. Add document upload functionality
+5. Add authentication to protect private financial data
 
 ## Project Structure
 ```

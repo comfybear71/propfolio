@@ -12,6 +12,8 @@ import {
   type Income,
   type Expense,
   type Asset,
+  type DiscoverProperty,
+  type WatchlistItem,
 } from "./data";
 
 export function useProperties() {
@@ -134,4 +136,95 @@ export function useAssets() {
   }, []);
 
   return { assets: data, setAssets: setData, saveAll, loaded };
+}
+
+export function useDiscover() {
+  const [data, setData] = useState<DiscoverProperty[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/discover")
+      .then((r) => r.json())
+      .then((d) => { if (Array.isArray(d)) setData(d); setLoaded(true); })
+      .catch(() => setLoaded(true));
+  }, []);
+
+  const add = useCallback(async (property: DiscoverProperty) => {
+    setData((prev) => [property, ...prev]);
+    await fetch("/api/discover", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(property),
+    }).catch(() => {});
+  }, []);
+
+  const update = useCallback(async (property: DiscoverProperty) => {
+    setData((prev) => prev.map((p) => (p.id === property.id ? property : p)));
+    await fetch("/api/discover", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(property),
+    }).catch(() => {});
+  }, []);
+
+  const remove = useCallback(async (id: string) => {
+    setData((prev) => prev.filter((p) => p.id !== id));
+    await fetch(`/api/discover?id=${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => {});
+  }, []);
+
+  return { discoverProperties: data, setDiscoverProperties: setData, addProperty: add, updateProperty: update, removeProperty: remove, loaded };
+}
+
+export function useWatchlist() {
+  const [data, setData] = useState<WatchlistItem[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/watchlist")
+      .then((r) => r.json())
+      .then((d) => { if (Array.isArray(d)) setData(d); setLoaded(true); })
+      .catch(() => setLoaded(true));
+  }, []);
+
+  const addToWatchlist = useCallback(async (property: DiscoverProperty, status: "liked" | "passed", notes?: string) => {
+    const item: WatchlistItem = {
+      id: `wl-${property.id}`,
+      propertyId: property.id,
+      property,
+      status,
+      notes: notes || "",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    setData((prev) => {
+      const existing = prev.findIndex((w) => w.propertyId === property.id);
+      if (existing >= 0) {
+        const updated = [...prev];
+        updated[existing] = item;
+        return updated;
+      }
+      return [item, ...prev];
+    });
+    await fetch("/api/watchlist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(item),
+    }).catch(() => {});
+  }, []);
+
+  const updateStatus = useCallback(async (id: string, status: "liked" | "passed") => {
+    setData((prev) => prev.map((w) => (w.id === id ? { ...w, status, updatedAt: new Date().toISOString() } : w)));
+    await fetch("/api/watchlist", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, status }),
+    }).catch(() => {});
+  }, []);
+
+  const removeFromWatchlist = useCallback(async (id: string) => {
+    setData((prev) => prev.filter((w) => w.id !== id));
+    await fetch(`/api/watchlist?id=${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => {});
+  }, []);
+
+  return { watchlist: data, setWatchlist: setData, addToWatchlist, updateStatus, removeFromWatchlist, loaded };
 }
