@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
     const safeDesc = file.name.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9_-]/g, "_");
     const blobName = `broker-pack/${safeCategory}/${datePart}_${safeCategory}_${safePerson}_${safeDesc}.${ext}`;
 
-    const blob = await put(blobName, file, { access: "public", addRandomSuffix: false });
+    const blob = await put(blobName, file, { access: "private", addRandomSuffix: false });
 
     await db.collection("files").insertOne({
       documentId,
