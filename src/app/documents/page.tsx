@@ -262,10 +262,18 @@ export default function DocumentsPage() {
                       frequency: "monthly" as const,
                     }));
                   if (expenses.length > 0) {
+                    // Fetch existing expenses and merge — don't overwrite
+                    const existingRes = await fetch("/api/expenses");
+                    const existing = await existingRes.json();
+                    const existingMap = new Map((existing || []).map((e: { id: string }) => [e.id, e]));
+                    // Update matching categories, add new ones, keep non-OCR ones
+                    for (const exp of expenses) {
+                      existingMap.set(exp.id, exp);
+                    }
                     await fetch("/api/expenses", {
                       method: "PUT",
                       headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify(expenses),
+                      body: JSON.stringify(Array.from(existingMap.values())),
                     });
                   }
                 } catch { /* expense update is best-effort */ }
