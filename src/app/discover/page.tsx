@@ -8,7 +8,7 @@ type Tab = "swipe" | "add" | "search" | "watchlist";
 
 export default function DiscoverPage() {
   const [activeTab, setActiveTab] = useState<Tab>("swipe");
-  const { discoverProperties, addProperty, loaded: dLoaded } = useDiscover();
+  const { discoverProperties, addProperty, addBulk, loaded: dLoaded } = useDiscover();
   const { watchlist, addToWatchlist, updateStatus, removeFromWatchlist, loaded: wLoaded } = useWatchlist();
 
   if (!dLoaded || !wLoaded) return <div className="text-center text-[var(--muted)] py-20">Loading...</div>;
@@ -53,7 +53,7 @@ export default function DiscoverPage() {
         />
       )}
       {activeTab === "add" && <AddPropertyTab onAdd={addProperty} />}
-      {activeTab === "search" && <SearchTab onImport={addProperty} />}
+      {activeTab === "search" && <SearchTab onImport={addProperty} onImportAll={addBulk} />}
       {activeTab === "watchlist" && (
         <WatchlistTab
           watchlist={watchlist}
@@ -471,7 +471,7 @@ function AddPropertyTab({ onAdd }: { onAdd: (p: DiscoverProperty) => void }) {
 
 /* ─── SEARCH API TAB ───────────────────────────────────────────── */
 
-function SearchTab({ onImport }: { onImport: (p: DiscoverProperty) => void }) {
+function SearchTab({ onImport, onImportAll }: { onImport: (p: DiscoverProperty) => void; onImportAll: (ps: DiscoverProperty[]) => void }) {
   const [apiSource, setApiSource] = useState<"rapidapi" | "domain">("rapidapi");
   const [filters, setFilters] = useState({
     state: "NT",
@@ -633,7 +633,10 @@ function SearchTab({ onImport }: { onImport: (p: DiscoverProperty) => void }) {
             <button
               onClick={() => {
                 const unimported = results.filter((p) => !imported.has(p.id));
-                unimported.forEach((p) => handleImport(p));
+                if (unimported.length > 0) {
+                  onImportAll(unimported);
+                  setImported(new Set(results.map((p) => p.id)));
+                }
               }}
               disabled={results.every((p) => imported.has(p.id))}
               className="text-xs bg-[#22c55e] text-white px-4 py-1.5 rounded-lg hover:bg-green-600 disabled:opacity-50 font-medium"

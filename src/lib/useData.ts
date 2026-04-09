@@ -158,6 +158,15 @@ export function useDiscover() {
     }).catch(() => {});
   }, []);
 
+  const addBulk = useCallback(async (properties: DiscoverProperty[]) => {
+    setData((prev) => [...properties, ...prev]);
+    await fetch("/api/discover", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(properties),
+    }).catch(() => {});
+  }, []);
+
   const update = useCallback(async (property: DiscoverProperty) => {
     setData((prev) => prev.map((p) => (p.id === property.id ? property : p)));
     await fetch("/api/discover", {
@@ -172,7 +181,7 @@ export function useDiscover() {
     await fetch(`/api/discover?id=${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => {});
   }, []);
 
-  return { discoverProperties: data, setDiscoverProperties: setData, addProperty: add, updateProperty: update, removeProperty: remove, loaded };
+  return { discoverProperties: data, setDiscoverProperties: setData, addProperty: add, addBulk, updateProperty: update, removeProperty: remove, loaded };
 }
 
 export function useWatchlist() {

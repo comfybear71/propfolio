@@ -12,6 +12,19 @@ export async function POST(req: NextRequest) {
   const db = await getDb();
   if (!db) return NextResponse.json({ ok: false, error: "No database" }, { status: 503 });
   const body = await req.json();
+
+  // Support bulk import (array) or single property
+  if (Array.isArray(body)) {
+    const properties = body.map((p) => ({
+      ...p,
+      createdAt: p.createdAt || new Date().toISOString(),
+    }));
+    if (properties.length > 0) {
+      await db.collection("discover_properties").insertMany(properties);
+    }
+    return NextResponse.json({ ok: true, count: properties.length });
+  }
+
   const property = {
     ...body,
     createdAt: body.createdAt || new Date().toISOString(),
