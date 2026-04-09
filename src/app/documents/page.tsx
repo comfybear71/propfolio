@@ -403,49 +403,27 @@ export default function DocumentsPage() {
                 if (filterStatus !== "All" && doc.status !== filterStatus) return null;
 
                 return (
-                  <div key={doc.id} className="px-3 sm:px-5 py-2.5 flex flex-col gap-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="font-medium text-sm">{doc.name}</span>
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                  <div key={doc.id} className="px-3 sm:px-5 py-2.5 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-medium text-sm">{doc.name}</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${
                           doc.forPerson === "Stuart" ? "bg-blue-500/20 text-blue-400" :
                           doc.forPerson === "Sasitron" ? "bg-purple-500/20 text-purple-400" :
                           doc.forPerson === "Property" ? "bg-orange-500/20 text-orange-400" :
                           "bg-[var(--card-border)] text-[var(--muted)]"
                         }`}>{doc.forPerson}</span>
                       </div>
-                        <p className="text-xs text-[var(--muted)] mt-0.5">{doc.description}</p>
-                      </div>
-                      <select
-                        value={doc.status}
-                        onChange={(e) => updateDoc(doc.id, "status", e.target.value)}
-                        className={`border rounded px-2 py-1 text-xs font-medium outline-none shrink-0 ${
-                          doc.status === "have"
-                            ? "bg-[var(--positive)]/20 border-[var(--positive)]/30 text-[var(--positive)]"
-                            : doc.status === "missing"
-                            ? "bg-[var(--negative)]/20 border-[var(--negative)]/30 text-[var(--negative)]"
-                            : doc.status === "expired"
-                            ? "bg-yellow-500/20 border-yellow-500/30 text-yellow-500"
-                            : doc.status === "n/a"
-                            ? "bg-[var(--card-border)] border-[var(--card-border)] text-[var(--muted)]"
-                            : "bg-[var(--accent)]/20 border-[var(--accent)]/30 text-[var(--accent)]"
-                        }`}
-                      >
-                        <option value="missing">Missing</option>
-                        <option value="have">Have</option>
-                        <option value="expired">Expired</option>
-                        <option value="requested">Requested</option>
-                        <option value="n/a">N/A</option>
-                      </select>
+                      <p className="text-xs text-[var(--muted)] mt-0.5">{doc.description}</p>
                     </div>
-                    <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex flex-col gap-1.5 shrink-0 items-end">
+                      <div className="flex items-center gap-2">
                         <input
                           type="text"
                           value={doc.notes}
                           onChange={(e) => updateDoc(doc.id, "notes", e.target.value)}
                           placeholder="Notes..."
-                          className="bg-[var(--background)] border border-[var(--card-border)] rounded px-2 py-1 text-xs w-32 focus:border-[var(--accent)] outline-none"
+                          className="bg-[var(--background)] border border-[var(--card-border)] rounded px-2 py-1 text-xs w-24 sm:w-32 focus:border-[var(--accent)] outline-none"
                         />
                         <label className="text-xs px-2 py-1 rounded border border-[var(--card-border)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] cursor-pointer transition-colors">
                           {uploading === doc.id ? "..." : "Upload"}
@@ -460,8 +438,28 @@ export default function DocumentsPage() {
                             }}
                           />
                         </label>
-                    </div>
-                    <div className="flex flex-col gap-1.5 items-start">
+                        <select
+                          value={doc.status}
+                          onChange={(e) => updateDoc(doc.id, "status", e.target.value)}
+                          className={`border rounded px-2 py-1 text-xs font-medium outline-none ${
+                            doc.status === "have"
+                              ? "bg-[var(--positive)]/20 border-[var(--positive)]/30 text-[var(--positive)]"
+                              : doc.status === "missing"
+                              ? "bg-[var(--negative)]/20 border-[var(--negative)]/30 text-[var(--negative)]"
+                              : doc.status === "expired"
+                              ? "bg-yellow-500/20 border-yellow-500/30 text-yellow-500"
+                              : doc.status === "n/a"
+                              ? "bg-[var(--card-border)] border-[var(--card-border)] text-[var(--muted)]"
+                              : "bg-[var(--accent)]/20 border-[var(--accent)]/30 text-[var(--accent)]"
+                          }`}
+                        >
+                          <option value="missing">Missing</option>
+                          <option value="have">Have</option>
+                          <option value="expired">Expired</option>
+                          <option value="requested">Requested</option>
+                          <option value="n/a">N/A</option>
+                        </select>
+                      </div>
                       {/* OCR scanning indicator */}
                       {ocrLoading === doc.id && (
                         <div className="text-xs text-[var(--accent)] animate-pulse">Reading document...</div>
