@@ -138,6 +138,7 @@ export default function DocumentsPage() {
   const [uploading, setUploading] = useState<string | null>(null);
   const [ocrResult, setOcrResult] = useState<{ docId: string; data: Record<string, unknown> } | null>(null);
   const [ocrLoading, setOcrLoading] = useState<string | null>(null);
+  const [ocrError, setOcrError] = useState<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(null);
 
   const saveDocuments = useCallback(async (docs: Document[]) => {
@@ -197,6 +198,7 @@ export default function DocumentsPage() {
         const isReadable = file.type.startsWith("image/") || file.type === "application/pdf";
         if (isReadable) {
           setOcrLoading(documentId);
+          setOcrError(null);
           try {
             const ocrForm = new FormData();
             ocrForm.append("file", file);
@@ -205,8 +207,12 @@ export default function DocumentsPage() {
             const ocrData = await ocrRes.json();
             if (ocrData.ok && ocrData.data) {
               setOcrResult({ docId: documentId, data: ocrData.data });
+            } else {
+              setOcrError(ocrData.error || "OCR returned no data");
             }
-          } catch { /* OCR is optional */ }
+          } catch (err) {
+            setOcrError("OCR failed: " + String(err));
+          }
           setOcrLoading(null);
         }
       }
@@ -407,6 +413,11 @@ export default function DocumentsPage() {
                       {/* OCR scanning indicator */}
                       {ocrLoading === doc.id && (
                         <div className="text-xs text-[var(--accent)] animate-pulse">Reading document...</div>
+                      )}
+                      {ocrError && ocrResult === null && ocrLoading === null && (
+                        <div className="text-xs text-[var(--negative)] bg-[var(--negative)]/10 rounded p-2 w-full max-w-sm">
+                          {ocrError}
+                        </div>
                       )}
                       {/* OCR results */}
                       {ocrResult?.docId === doc.id && (
