@@ -111,10 +111,60 @@ For TAX RETURNS / NOA, extract:
 Calculate annual figures where possible. Return ONLY JSON.`;
   }
 
+  if (category.includes("Living") || category.includes("Bills") || category.includes("Expense")) {
+    return `${baseInstruction}
+
+This is a bank statement or credit card statement being uploaded for expense tracking.
+Read EVERY transaction and categorise each one. Return this JSON:
+
+{
+  "documentType": "expense_statement",
+  "accountHolder": "",
+  "bankName": "",
+  "statementPeriod": "",
+  "monthsCovered": 1,
+  "transactions": [
+    {"date": "YYYY-MM-DD", "description": "", "amount": 0, "type": "debit|credit", "category": ""}
+  ],
+  "expensesByCategory": {
+    "Groceries": 0,
+    "Fuel & Transport": 0,
+    "Utilities": 0,
+    "Insurance": 0,
+    "Subscriptions": 0,
+    "Eating Out": 0,
+    "Entertainment": 0,
+    "Health & Medical": 0,
+    "Education & Childcare": 0,
+    "Clothing": 0,
+    "Home & Garden": 0,
+    "Loan Repayments": 0,
+    "Rent": 0,
+    "Phone & Internet": 0,
+    "Other": 0
+  },
+  "totalDebits": 0,
+  "totalCredits": 0,
+  "monthlyAverage": 0,
+  "incomeItems": [{"description": "", "amount": 0, "frequency": ""}]
+}
+
+RULES:
+1. Read EVERY transaction line — do not skip any
+2. Categorise each debit transaction using the categories above
+3. "expensesByCategory" should be the TOTAL for each category across the statement period
+4. "monthlyAverage" = totalDebits / monthsCovered
+5. Credits (income) go into "incomeItems" — identify salary, rent, transfers
+6. Debits are expenses — categorise by merchant name
+7. Common Australian merchants: Woolworths/Coles = Groceries, BP/Shell/Ampol = Fuel, Netflix/Stan = Subscriptions
+8. If the statement covers multiple months, calculate monthly averages
+9. Return ONLY JSON`;
+  }
+
   if (category.includes("Assets") || category.includes("Bank") || category.includes("Savings")) {
     return `${baseInstruction}
 
-For BANK STATEMENTS, extract:
+For BANK STATEMENTS, extract all transactions and summary:
 {
   "documentType": "bank_statement",
   "accountHolder": "", "bankName": "", "bsb": "", "accountNumber": "",
@@ -123,8 +173,14 @@ For BANK STATEMENTS, extract:
   "totalCredits": 0, "totalDebits": 0,
   "averageBalance": 0,
   "regularIncome": [{"description": "", "amount": 0, "frequency": ""}],
-  "regularExpenses": [{"description": "", "amount": 0, "frequency": ""}]
+  "regularExpenses": [{"description": "", "amount": 0, "frequency": ""}],
+  "expensesByCategory": {
+    "Groceries": 0, "Fuel & Transport": 0, "Utilities": 0, "Insurance": 0,
+    "Subscriptions": 0, "Eating Out": 0, "Loan Repayments": 0, "Other": 0
+  }
 }
+
+Categorise all debit transactions by merchant name into expense categories.
 
 For SUPER STATEMENTS, extract:
 {

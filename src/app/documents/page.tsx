@@ -247,6 +247,29 @@ export default function DocumentsPage() {
                   });
                 } catch { /* income update is best-effort */ }
               }
+              // Auto-update expenses if it's a bank/expense statement
+              if ((ocrData.data.documentType === "expense_statement" || ocrData.data.documentType === "bank_statement") && ocrData.data.expensesByCategory) {
+                try {
+                  const cats = ocrData.data.expensesByCategory as Record<string, number>;
+                  const months = (ocrData.data.monthsCovered as number) || 1;
+                  const expenses = Object.entries(cats)
+                    .filter(([, amount]) => amount > 0)
+                    .map(([cat, amount]) => ({
+                      id: `exp-${cat.toLowerCase().replace(/[^a-z]/g, "")}`,
+                      category: cat,
+                      description: `From bank statement (${ocrData.data.statementPeriod || "uploaded"})`,
+                      amount: Math.round(amount / months),
+                      frequency: "monthly" as const,
+                    }));
+                  if (expenses.length > 0) {
+                    await fetch("/api/expenses", {
+                      method: "PUT",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify(expenses),
+                    });
+                  }
+                } catch { /* expense update is best-effort */ }
+              }
             } else {
               setOcrError(ocrData.error || "OCR returned no data");
             }
