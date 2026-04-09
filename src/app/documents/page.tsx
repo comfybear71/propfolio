@@ -270,6 +270,26 @@ export default function DocumentsPage() {
                   }
                 } catch { /* expense update is best-effort */ }
               }
+              // Auto-update super balance on assets page
+              if (ocrData.data.documentType === "super_statement" && ocrData.data.balance) {
+                try {
+                  const d = ocrData.data;
+                  const memberName = (d.memberName as string) || person;
+                  await fetch("/api/assets", {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify([{
+                      id: `super-${memberName.toLowerCase().replace(/[^a-z]/g, "")}`,
+                      owner: memberName,
+                      category: "Superannuation",
+                      description: `${d.fundName || "Super"} — ${d.memberNumber || ""}`.trim(),
+                      estimatedValue: d.balance,
+                      notes: `Updated from statement. ${d.investmentOption || ""}`.trim(),
+                      relevantForLending: false,
+                    }]),
+                  });
+                } catch { /* asset update is best-effort */ }
+              }
             } else {
               setOcrError(ocrData.error || "OCR returned no data");
             }
