@@ -45,10 +45,10 @@ export default function DiscoverPage() {
   ];
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
+    <div className="space-y-4 sm:space-y-6 max-w-4xl mx-auto">
       <div>
-        <h2 className="text-2xl font-bold mb-1">Discover Properties</h2>
-        <p className="text-[var(--muted)]">Search, swipe to like or pass — only liked properties save to your watchlist</p>
+        <h2 className="text-xl sm:text-2xl font-bold mb-1">Discover Properties</h2>
+        <p className="text-[var(--muted)] text-sm">Search, swipe to like or pass — only liked properties save to your watchlist</p>
       </div>
 
       {/* Tab bar */}
@@ -57,7 +57,7 @@ export default function DiscoverPage() {
           <button
             key={t.key}
             onClick={() => setActiveTab(t.key)}
-            className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
+            className={`flex-1 py-2 px-2 sm:px-3 rounded-md text-xs sm:text-sm font-medium transition-colors ${
               activeTab === t.key
                 ? "bg-[#3b82f6] text-white"
                 : "text-[var(--muted)] hover:text-white hover:bg-[var(--border)]"
@@ -160,17 +160,38 @@ function SwipeTab({
     [current, onLike, exitDirection, advanceCard]
   );
 
-  const onPointerDown = (e: React.PointerEvent) => {
+  // Use touch events for mobile (prevents page scroll/bounce) + pointer for desktop
+  const onTouchStart = (e: React.TouchEvent) => {
+    if (exitDirection) return;
+    setIsDragging(true);
+    setStartX(e.touches[0].clientX);
+  };
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (!isDragging || exitDirection) return;
+    // Prevent page scrolling while swiping the card
+    e.preventDefault();
+    setDragX(e.touches[0].clientX - startX);
+  };
+  const onTouchEnd = () => {
+    if (!isDragging) return;
+    setIsDragging(false);
+    if (Math.abs(dragX) > 80) {
+      handleSwipe(dragX > 0 ? "right" : "left");
+    } else {
+      setDragX(0);
+    }
+  };
+  // Desktop mouse fallback
+  const onMouseDown = (e: React.MouseEvent) => {
     if (exitDirection) return;
     setIsDragging(true);
     setStartX(e.clientX);
-    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
   };
-  const onPointerMove = (e: React.PointerEvent) => {
+  const onMouseMove = (e: React.MouseEvent) => {
     if (!isDragging || exitDirection) return;
     setDragX(e.clientX - startX);
   };
-  const onPointerUp = () => {
+  const onMouseUp = () => {
     if (!isDragging) return;
     setIsDragging(false);
     if (Math.abs(dragX) > 100) {
@@ -248,20 +269,25 @@ function SwipeTab({
 
   const progressPct = ((currentIndex + 1) / total) * 100;
 
+  // Format price display — handle "All Offers Presented" / "Contact Agent" type strings
+  const displayPrice = isLandBuild
+    ? formatCurrency((current.landPrice || 0) + (current.buildCost || 0))
+    : current.price > 0
+      ? formatCurrency(current.price)
+      : null;
+  const displayPriceText = (current as DiscoverProperty & { displayPrice?: string }).displayPrice || "";
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Progress bar and counter */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-white">
-            {currentIndex + 1} <span className="text-[var(--muted)]">of</span> {total}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-sm font-bold text-white whitespace-nowrap">
+            {currentIndex + 1} <span className="text-[var(--muted)] font-normal">of</span> {total}
           </span>
           {loadingMore && (
             <span className="text-xs text-[#3b82f6] animate-pulse">Loading more...</span>
           )}
-          <span className="text-xs text-[var(--muted)]">
-            Swipe right = Like &bull; Swipe left = Pass
-          </span>
         </div>
         <div className="w-full h-1.5 bg-[var(--border)] rounded-full overflow-hidden">
           <div
@@ -286,33 +312,36 @@ function SwipeTab({
       `}</style>
 
       {/* Swipe card */}
-      <div className="relative overflow-hidden rounded-xl" style={{ minHeight: "420px" }}>
+      <div className="relative overflow-hidden rounded-xl">
         <div
           ref={cardRef}
           className="bg-[var(--card)] border border-[var(--border)] rounded-xl overflow-hidden cursor-grab active:cursor-grabbing select-none"
-          style={getCardStyle()}
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerLeave={onPointerUp}
+          style={{ ...getCardStyle(), touchAction: "none" }}
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onTouchEnd={onTouchEnd}
+          onMouseDown={onMouseDown}
+          onMouseMove={onMouseMove}
+          onMouseUp={onMouseUp}
+          onMouseLeave={onMouseUp}
         >
           {/* Swipe indicators */}
           <div
-            className="absolute top-6 left-6 z-10 bg-green-500/90 text-white px-5 py-2 rounded-lg text-xl font-bold rotate-[-12deg] transition-opacity duration-150"
+            className="absolute top-4 left-4 z-10 bg-green-500/90 text-white px-4 py-1.5 rounded-lg text-lg font-bold rotate-[-12deg] transition-opacity duration-150"
             style={{ opacity: dragX > 50 ? Math.min((dragX - 50) / 100, 1) : 0 }}
           >
             LIKE ♥
           </div>
           <div
-            className="absolute top-6 right-6 z-10 bg-red-500/90 text-white px-5 py-2 rounded-lg text-xl font-bold rotate-[12deg] transition-opacity duration-150"
+            className="absolute top-4 right-4 z-10 bg-red-500/90 text-white px-4 py-1.5 rounded-lg text-lg font-bold rotate-[12deg] transition-opacity duration-150"
             style={{ opacity: dragX < -50 ? Math.min((-dragX - 50) / 100, 1) : 0 }}
           >
             PASS ✕
           </div>
 
-          {/* Property image */}
+          {/* Property image — shorter on mobile */}
           {current.imageUrl ? (
-            <div className="h-56 bg-[var(--border)] overflow-hidden">
+            <div className="h-44 sm:h-56 bg-[var(--border)] overflow-hidden">
               <img
                 src={current.imageUrl}
                 alt={current.address}
@@ -321,58 +350,56 @@ function SwipeTab({
               />
             </div>
           ) : (
-            <div className="h-56 bg-[var(--border)] flex items-center justify-center text-[var(--muted)] text-4xl">
+            <div className="h-44 sm:h-56 bg-[var(--border)] flex items-center justify-center text-[var(--muted)] text-4xl">
               🏠
             </div>
           )}
 
           {/* Property details */}
-          <div className="p-5 space-y-3">
-            <div className="flex items-start justify-between">
-              <div>
-                <h3 className="text-lg font-bold">{current.address}</h3>
-                <p className="text-sm text-[var(--muted)]">
-                  {current.suburb}, {current.state} {current.postcode}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-lg font-bold text-[#3b82f6]">
-                  {isLandBuild
-                    ? formatCurrency((current.landPrice || 0) + (current.buildCost || 0))
-                    : current.price > 0
-                      ? formatCurrency(current.price)
-                      : (current as DiscoverProperty & { displayPrice?: string }).displayPrice || "Contact Agent"}
-                </p>
-                {isLandBuild && (
-                  <p className="text-xs text-[var(--muted)]">
-                    Land {formatCurrency(current.landPrice || 0)} + Build {formatCurrency(current.buildCost || 0)}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {/* Specs row */}
-            <div className="flex gap-4 text-sm">
-              {current.bedrooms != null && <span>{current.bedrooms} bed</span>}
-              {current.bathrooms != null && <span>{current.bathrooms} bath</span>}
-              {current.carSpaces != null && <span>{current.carSpaces} car</span>}
-              {current.landSize != null && <span>{current.landSize} m&sup2;</span>}
-              {current.yearBuilt != null && <span>Built {current.yearBuilt}</span>}
-              <span className="text-[var(--muted)]">{current.propertyType}</span>
-            </div>
-
-            {/* Yield */}
-            {current.estimatedWeeklyRent > 0 && (
-              <div className="flex items-center gap-4 text-sm">
-                <span>
-                  Est. rent: <strong>${current.estimatedWeeklyRent}/wk</strong>
-                </span>
+          <div className="p-4 space-y-2">
+            {/* Price row — always on top, full width */}
+            <div className="flex items-baseline justify-between gap-2">
+              {displayPrice ? (
+                <p className="text-xl font-bold text-[#3b82f6]">{displayPrice}</p>
+              ) : (
+                <p className="text-sm font-bold text-[#3b82f6] truncate">{displayPriceText || "Contact Agent"}</p>
+              )}
+              {grossYield > 0 && (
                 <span
-                  className={`font-bold ${grossYield >= 7 ? "text-[#22c55e]" : grossYield >= 5 ? "text-yellow-400" : "text-[#ef4444]"}`}
+                  className={`text-sm font-bold whitespace-nowrap ${grossYield >= 7 ? "text-[#22c55e]" : grossYield >= 5 ? "text-yellow-400" : "text-[#ef4444]"}`}
                 >
                   {grossYield.toFixed(1)}% yield
                 </span>
-              </div>
+              )}
+            </div>
+            {isLandBuild && (
+              <p className="text-xs text-[var(--muted)]">
+                Land {formatCurrency(current.landPrice || 0)} + Build {formatCurrency(current.buildCost || 0)}
+              </p>
+            )}
+
+            {/* Address */}
+            <div>
+              <h3 className="text-base font-bold truncate">{current.address || current.suburb}</h3>
+              <p className="text-sm text-[var(--muted)]">
+                {current.suburb}, {current.state} {current.postcode}
+              </p>
+            </div>
+
+            {/* Specs row */}
+            <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm">
+              {current.bedrooms != null && <span>{current.bedrooms} bed</span>}
+              {current.bathrooms != null && <span>{current.bathrooms} bath</span>}
+              {current.carSpaces != null && <span>{current.carSpaces} car</span>}
+              {current.landSize != null && <span>{current.landSize} m²</span>}
+              <span className="text-[var(--muted)]">{current.propertyType}</span>
+            </div>
+
+            {/* Rent estimate */}
+            {current.estimatedWeeklyRent > 0 && (
+              <p className="text-sm">
+                Est. rent: <strong>${current.estimatedWeeklyRent}/wk</strong>
+              </p>
             )}
 
             {/* Affordability toggle */}
@@ -393,9 +420,9 @@ function SwipeTab({
                     <Row label="Net Cash Needed" value={formatCurrency(netDeposit)} />
                     <div className="border-t border-[var(--border)] my-1" />
                     <Row label="Loan Amount" value={formatCurrency(loanAmount)} />
-                    <Row label="Monthly Repayment (6.5%, 30yr)" value={formatCurrency(monthlyRepayment)} />
+                    <Row label="Repayment (6.5%, 30yr)" value={formatCurrency(monthlyRepayment) + "/mo"} />
                     <Row
-                      label="Weekly Cash Flow"
+                      label="Cash Flow"
                       value={`${weeklyCashFlow >= 0 ? "+" : ""}${formatCurrency(weeklyCashFlow)}/wk`}
                       positive={weeklyCashFlow >= 0}
                       negative={weeklyCashFlow < 0}
@@ -414,45 +441,36 @@ function SwipeTab({
                 className="text-xs text-[#3b82f6] hover:underline block"
                 onClick={(e) => e.stopPropagation()}
               >
-                View original listing &rarr;
+                View listing &rarr;
               </a>
-            )}
-
-            {current.notes && (
-              <p className="text-xs text-[var(--muted)] italic">{current.notes}</p>
             )}
           </div>
         </div>
       </div>
 
-      {/* Action buttons */}
-      <div className="flex justify-center items-center gap-6">
+      {/* Action buttons — always visible */}
+      <div className="flex justify-center items-center gap-8 py-2">
         <button
           onClick={() => handleSwipe("left")}
           disabled={!!exitDirection}
-          className="w-16 h-16 rounded-full bg-[var(--card)] border-2 border-[#ef4444] text-[#ef4444] text-2xl font-bold hover:bg-[#ef4444] hover:text-white transition-all duration-200 flex items-center justify-center active:scale-90 disabled:opacity-50"
+          className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-[var(--card)] border-2 border-[#ef4444] text-[#ef4444] text-xl sm:text-2xl font-bold hover:bg-[#ef4444] hover:text-white transition-all duration-200 flex items-center justify-center active:scale-90 disabled:opacity-50"
           title="Pass"
         >
           ✕
         </button>
-        <div className="text-center">
-          <div className="text-2xl font-bold text-white">{currentIndex + 1}</div>
+        <div className="text-center min-w-[3rem]">
+          <div className="text-xl font-bold text-white">{currentIndex + 1}</div>
           <div className="text-xs text-[var(--muted)]">of {total}</div>
         </div>
         <button
           onClick={() => handleSwipe("right")}
           disabled={!!exitDirection}
-          className="w-16 h-16 rounded-full bg-[var(--card)] border-2 border-[#22c55e] text-[#22c55e] text-2xl hover:bg-[#22c55e] hover:text-white transition-all duration-200 flex items-center justify-center active:scale-90 disabled:opacity-50"
+          className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-[var(--card)] border-2 border-[#22c55e] text-[#22c55e] text-xl sm:text-2xl hover:bg-[#22c55e] hover:text-white transition-all duration-200 flex items-center justify-center active:scale-90 disabled:opacity-50"
           title="Like — saves to watchlist"
         >
           ♥
         </button>
       </div>
-
-      {/* Keyboard hint */}
-      <p className="text-center text-xs text-[var(--muted)]">
-        Tip: Drag the card or tap the buttons
-      </p>
     </div>
   );
 }
