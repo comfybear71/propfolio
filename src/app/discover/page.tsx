@@ -7,16 +7,42 @@ import { useDiscover, useWatchlist } from "@/lib/useData";
 type Tab = "swipe" | "add" | "search" | "watchlist";
 
 export default function DiscoverPage() {
-  const [activeTab, setActiveTab] = useState<Tab>("swipe");
-  const { discoverProperties, addProperty, addBulk, loaded: dLoaded } = useDiscover();
+  const [activeTab, setActiveTab] = useState<Tab>("search");
+  const { addProperty, loaded: dLoaded } = useDiscover();
   const { watchlist, addToWatchlist, updateStatus, removeFromWatchlist, loaded: wLoaded } = useWatchlist();
+  // Search results feed directly into swipe — no DB save needed until liked
+  const [searchResults, setSearchResults] = useState<DiscoverProperty[]>([]);
+  // Store last search filters for auto-loading next page
+  const [lastFilters, setLastFilters] = useState<Record<string, unknown> | null>(null);
+  const [lastApiSource, setLastApiSource] = useState<"rapidapi" | "domain">("rapidapi");
+  const [nextPage, setNextPage] = useState(2);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  const loadMoreResults = useCallback(async () => {
+    if (!lastFilters || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const endpoint = lastApiSource === "rapidapi" ? "/api/rapidapi-search" : "/api/domain-search";
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...lastFilters, pageNumber: nextPage, page: nextPage }),
+      });
+      const data = await res.json();
+      if (data.ok && data.results?.length > 0) {
+        setSearchResults((prev) => [...prev, ...data.results]);
+        setNextPage((p) => p + 1);
+      }
+    } catch { /* silently fail */ }
+    setLoadingMore(false);
+  }, [lastFilters, lastApiSource, nextPage, loadingMore]);
 
   if (!dLoaded || !wLoaded) return <div className="text-center text-[var(--muted)] py-20">Loading...</div>;
 
   const tabs: { key: Tab; label: string }[] = [
-    { key: "swipe", label: "Swipe" },
+    { key: "search", label: "Search" },
+    { key: "swipe", label: `Swipe (${searchResults.length})` },
     { key: "add", label: "Add Property" },
-    { key: "search", label: "Search API" },
     { key: "watchlist", label: `Watchlist (${watchlist.filter((w) => w.status === "liked").length})` },
   ];
 
@@ -24,7 +50,7 @@ export default function DiscoverPage() {
     <div className="space-y-6 max-w-4xl mx-auto">
       <div>
         <h2 className="text-2xl font-bold mb-1">Discover Properties</h2>
-        <p className="text-[var(--muted)]">Swipe through properties, search the Domain API, or add your own finds</p>
+        <p className="text-[var(--muted)]">Search for properties, swipe to like or pass — liked properties save to your watchlist</p>
       </div>
 
       {/* Tab bar */}
@@ -44,16 +70,30 @@ export default function DiscoverPage() {
         ))}
       </div>
 
+      {activeTab === "search" && (
+        <SearchTab
+          onResultsLoaded={(results, filters, apiSource) => {
+            setSearchResults(results);
+            setLastFilters(filters);
+            setLastApiSource(apiSource);
+            setNextPage(2);
+            setActiveTab("swipe");
+          }}
+        />
+      )}
       {activeTab === "swipe" && (
         <SwipeTab
-          properties={discoverProperties}
+          properties={searchResults}
           watchlist={watchlist}
           onLike={(p) => addToWatchlist(p, "liked")}
           onPass={(p) => addToWatchlist(p, "passed")}
+          onNeedMore={loadMoreResults}
         />
       )}
+      {loadingMore && (
+        <p className="text-center text-xs text-[var(--muted)]">Loading more properties...</p>
+      )}
       {activeTab === "add" && <AddPropertyTab onAdd={addProperty} />}
-      {activeTab === "search" && <SearchTab onImport={addProperty} onImportAll={addBulk} />}
       {activeTab === "watchlist" && (
         <WatchlistTab
           watchlist={watchlist}
@@ -72,11 +112,13 @@ function SwipeTab({
   watchlist,
   onLike,
   onPass,
+  onNeedMore,
 }: {
   properties: DiscoverProperty[];
   watchlist: { propertyId: string }[];
   onLike: (p: DiscoverProperty) => void;
   onPass: (p: DiscoverProperty) => void;
+  onNeedMore?: () => void;
 }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [dragX, setDragX] = useState(0);
@@ -95,11 +137,16 @@ function SwipeTab({
       if (!current) return;
       if (direction === "right") onLike(current);
       else onPass(current);
-      setCurrentIndex((i) => Math.min(i + 1, unswiped.length));
+      const nextIndex = currentIndex + 1;
+      setCurrentIndex(nextIndex);
       setDragX(0);
       setShowAffordability(false);
+      // Auto-load more when 5 cards from the end
+      if (unswiped.length - nextIndex <= 5 && onNeedMore) {
+        onNeedMore();
+      }
     },
-    [current, onLike, onPass, unswiped.length]
+    [current, onLike, onPass, unswiped.length, currentIndex, onNeedMore]
   );
 
   const onPointerDown = (e: React.PointerEvent) => {
@@ -471,7 +518,7 @@ function AddPropertyTab({ onAdd }: { onAdd: (p: DiscoverProperty) => void }) {
 
 /* ─── SEARCH API TAB ───────────────────────────────────────────── */
 
-function SearchTab({ onImport, onImportAll }: { onImport: (p: DiscoverProperty) => void; onImportAll: (ps: DiscoverProperty[]) => void }) {
+function SearchTab({ onResultsLoaded }: { onResultsLoaded: (results: DiscoverProperty[], filters: Record<string, unknown>, apiSource: "rapidapi" | "domain") => void }) {
   const [apiSource, setApiSource] = useState<"rapidapi" | "domain">("rapidapi");
   const [filters, setFilters] = useState({
     state: "NT",
@@ -488,7 +535,6 @@ function SearchTab({ onImport, onImportAll }: { onImport: (p: DiscoverProperty) 
   const [results, setResults] = useState<DiscoverProperty[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [imported, setImported] = useState<Set<string>>(new Set());
 
   const handleSearch = async () => {
     setLoading(true);
@@ -512,11 +558,6 @@ function SearchTab({ onImport, onImportAll }: { onImport: (p: DiscoverProperty) 
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleImport = (p: DiscoverProperty) => {
-    onImport(p);
-    setImported((prev) => new Set(prev).add(p.id));
   };
 
   const inputClass = "w-full bg-[#0a0a0a] border border-[var(--border)] rounded px-3 py-2 text-sm text-white";
@@ -628,69 +669,39 @@ function SearchTab({ onImport, onImportAll }: { onImport: (p: DiscoverProperty) 
       {/* Results */}
       {results.length > 0 && (
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h4 className="font-medium text-sm text-[var(--muted)]">{results.length} results</h4>
-            <button
-              onClick={() => {
-                const unimported = results.filter((p) => !imported.has(p.id));
-                if (unimported.length > 0) {
-                  onImportAll(unimported);
-                  setImported(new Set(results.map((p) => p.id)));
-                }
-              }}
-              disabled={results.every((p) => imported.has(p.id))}
-              className="text-xs bg-[#22c55e] text-white px-4 py-1.5 rounded-lg hover:bg-green-600 disabled:opacity-50 font-medium"
-            >
-              {results.every((p) => imported.has(p.id))
-                ? `All ${results.length} Imported`
-                : `Import All ${results.filter((p) => !imported.has(p.id)).length}`}
-            </button>
-          </div>
+          <button
+            onClick={() => onResultsLoaded(results, filters, apiSource)}
+            className="w-full bg-[#22c55e] text-white py-3 rounded-lg font-bold text-lg hover:bg-green-600 transition-colors"
+          >
+            Start Swiping {results.length} Properties &rarr;
+          </button>
+          <h4 className="font-medium text-sm text-[var(--muted)]">{results.length} results preview</h4>
           {results.map((p) => (
             <div key={p.id} className="bg-[var(--card)] border border-[var(--border)] rounded-xl overflow-hidden flex">
               {p.imageUrl ? (
                 <img
                   src={p.imageUrl}
                   alt={p.address}
-                  className="w-32 h-32 object-cover flex-shrink-0"
+                  className="w-24 h-24 object-cover flex-shrink-0"
                   onError={(e) => {
                     (e.target as HTMLImageElement).style.display = "none";
                     (e.target as HTMLImageElement).nextElementSibling?.classList.remove("hidden");
                   }}
                 />
               ) : null}
-              <div className={`w-32 h-32 bg-[var(--border)] flex items-center justify-center text-3xl flex-shrink-0 ${p.imageUrl ? "hidden" : ""}`}>
+              <div className={`w-24 h-24 bg-[var(--border)] flex items-center justify-center text-2xl flex-shrink-0 ${p.imageUrl ? "hidden" : ""}`}>
                 🏠
               </div>
-              <div className="p-3 flex-1 min-w-0">
-                <p className="font-medium text-sm truncate">{p.address}</p>
+              <div className="p-2 flex-1 min-w-0">
+                <p className="font-medium text-sm truncate">{p.address || p.suburb}</p>
                 <p className="text-xs text-[var(--muted)]">{p.suburb}, {p.state} {p.postcode}</p>
-                <p className="text-sm font-bold text-[#3b82f6] mt-1">
+                <p className="text-sm font-bold text-[#3b82f6]">
                   {p.price > 0 ? formatCurrency(p.price) : (p as DiscoverProperty & { displayPrice?: string }).displayPrice || "Contact Agent"}
                 </p>
-                <div className="flex gap-3 text-xs text-[var(--muted)] mt-1">
+                <div className="flex gap-3 text-xs text-[var(--muted)]">
                   {p.bedrooms != null && <span>{p.bedrooms} bed</span>}
                   {p.bathrooms != null && <span>{p.bathrooms} bath</span>}
                   {p.carSpaces != null && <span>{p.carSpaces} car</span>}
-                </div>
-                <div className="flex gap-2 mt-2">
-                  <button
-                    onClick={() => handleImport(p)}
-                    disabled={imported.has(p.id)}
-                    className="text-xs bg-[#3b82f6] text-white px-3 py-1 rounded hover:bg-blue-600 disabled:opacity-50"
-                  >
-                    {imported.has(p.id) ? "Imported" : "Import"}
-                  </button>
-                  {p.listingUrl && (
-                    <a
-                      href={p.listingUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-[#3b82f6] hover:underline py-1"
-                    >
-                      View &rarr;
-                    </a>
-                  )}
                 </div>
               </div>
             </div>
