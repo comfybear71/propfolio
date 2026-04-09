@@ -45,6 +45,7 @@ export default function DiscoverPage() {
 
   return (
     <div className="space-y-3 max-w-4xl mx-auto">
+      <h1 className="text-lg font-bold tracking-wide"><span className="text-[#3b82f6]">PROPFOLIO</span> <span className="text-[var(--muted)] font-normal">— DISCOVERY</span></h1>
       {/* Tab bar */}
       <div className="flex gap-0.5 bg-[var(--card)] rounded-lg p-0.5 border border-[var(--border)]">
         {tabs.map((t) => (
@@ -75,7 +76,6 @@ export default function DiscoverPage() {
       {activeTab === "swipe" && (
         <SwipeTab
           properties={searchResults}
-          watchlist={watchlist}
           onLike={(p) => addToWatchlist(p, "liked")}
           onNeedMore={loadMoreResults}
           loadingMore={loadingMore}
@@ -96,13 +96,11 @@ export default function DiscoverPage() {
 
 function SwipeTab({
   properties,
-  watchlist,
   onLike,
   onNeedMore,
   loadingMore,
 }: {
   properties: DiscoverProperty[];
-  watchlist: { propertyId: string }[];
   onLike: (p: DiscoverProperty) => void;
   onNeedMore?: () => void;
   loadingMore?: boolean;
@@ -110,19 +108,19 @@ function SwipeTab({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [dragX, setDragX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const [isHorizontal, setIsHorizontal] = useState(false);
   const [startX, setStartX] = useState(0);
+  const [startY, setStartY] = useState(0);
   const [showAffordability, setShowAffordability] = useState(false);
-  // Animation state
   const [exitDirection, setExitDirection] = useState<"left" | "right" | null>(null);
   const [entering, setEntering] = useState(false);
+  const [savedToast, setSavedToast] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
+  // Track pending like so we defer DB save until after animation
+  const pendingLike = useRef<DiscoverProperty | null>(null);
 
-  // Filter out already-liked properties (passed ones stay in the stack)
-  const likedIds = new Set(watchlist.filter((w) => (w as { status?: string }).status === "liked").map((w) => w.propertyId));
-  const unswiped = properties.filter((p) => !likedIds.has(p.id));
-
-  const current = unswiped[currentIndex];
-  const total = unswiped.length;
+  const total = properties.length;
+  const current = properties[currentIndex];
 
   // Auto-load more when 5 cards from the end
   useEffect(() => {
@@ -131,50 +129,82 @@ function SwipeTab({
     }
   }, [currentIndex, total, onNeedMore, loadingMore]);
 
+  // Preload next 3 images so swiping feels instant
+  useEffect(() => {
+    for (let i = 1; i <= 3; i++) {
+      const next = properties[currentIndex + i];
+      if (next?.imageUrl) {
+        const img = new Image();
+        img.src = next.imageUrl;
+      }
+    }
+  }, [currentIndex, properties]);
+
   const advanceCard = useCallback(() => {
+    // Save to DB AFTER animation completes
+    if (pendingLike.current) {
+      onLike(pendingLike.current);
+      pendingLike.current = null;
+      setSavedToast(true);
+      setTimeout(() => setSavedToast(false), 1200);
+    }
     setExitDirection(null);
     setEntering(true);
     setCurrentIndex((i) => i + 1);
     setShowAffordability(false);
     setDragX(0);
-    // Remove entrance animation after it plays
     setTimeout(() => setEntering(false), 300);
-  }, []);
+  }, [onLike]);
 
   const handleSwipe = useCallback(
     (direction: "left" | "right") => {
       if (!current || exitDirection) return;
-      if (direction === "right") onLike(current);
-      // "left" = pass — no DB save, just skip
+      if (direction === "right") {
+        pendingLike.current = current;
+      }
       setExitDirection(direction);
-      // Wait for exit animation, then advance
       setTimeout(advanceCard, 400);
     },
-    [current, onLike, exitDirection, advanceCard]
+    [current, exitDirection, advanceCard]
   );
 
-  // Use touch events for mobile (prevents page scroll/bounce) + pointer for desktop
+  // Touch: detect horizontal vs vertical, only block scroll on horizontal
   const onTouchStart = (e: React.TouchEvent) => {
     if (exitDirection) return;
     setIsDragging(true);
+    setIsHorizontal(false);
     setStartX(e.touches[0].clientX);
+    setStartY(e.touches[0].clientY);
   };
   const onTouchMove = (e: React.TouchEvent) => {
     if (!isDragging || exitDirection) return;
-    // Prevent page scrolling while swiping the card
+    const dx = e.touches[0].clientX - startX;
+    const dy = e.touches[0].clientY - startY;
+    // On first significant move, decide: horizontal swipe or vertical scroll
+    if (!isHorizontal && Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+    if (!isHorizontal) {
+      if (Math.abs(dx) > Math.abs(dy)) {
+        setIsHorizontal(true);
+      } else {
+        // Vertical scroll — let browser handle it
+        setIsDragging(false);
+        return;
+      }
+    }
     e.preventDefault();
-    setDragX(e.touches[0].clientX - startX);
+    setDragX(dx);
   };
   const onTouchEnd = () => {
     if (!isDragging) return;
     setIsDragging(false);
+    setIsHorizontal(false);
     if (Math.abs(dragX) > 80) {
       handleSwipe(dragX > 0 ? "right" : "left");
     } else {
       setDragX(0);
     }
   };
-  // Desktop mouse fallback
+  // Desktop mouse
   const onMouseDown = (e: React.MouseEvent) => {
     if (exitDirection) return;
     setIsDragging(true);
@@ -305,7 +335,7 @@ function SwipeTab({
         <div
           ref={cardRef}
           className="bg-[var(--card)] border border-[var(--border)] rounded-xl overflow-hidden cursor-grab active:cursor-grabbing select-none"
-          style={{ ...getCardStyle(), touchAction: "none" }}
+          style={getCardStyle()}
           onTouchStart={onTouchStart}
           onTouchMove={onTouchMove}
           onTouchEnd={onTouchEnd}
@@ -431,25 +461,30 @@ function SwipeTab({
         </div>
       </div>
 
-      {/* Action buttons — always visible */}
-      <div className="flex justify-center items-center gap-8 py-2">
+      {/* Saved toast */}
+      {savedToast && (
+        <div className="text-center text-sm font-medium text-[#22c55e] animate-pulse">
+          Saved to watchlist
+        </div>
+      )}
+
+      {/* Action buttons */}
+      <div className="flex justify-center items-center gap-6 py-1">
         <button
           onClick={() => handleSwipe("left")}
           disabled={!!exitDirection}
-          className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-[var(--card)] border-2 border-[#ef4444] text-[#ef4444] text-xl sm:text-2xl font-bold hover:bg-[#ef4444] hover:text-white transition-all duration-200 flex items-center justify-center active:scale-90 disabled:opacity-50"
-          title="Pass"
+          className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-[var(--card)] border-2 border-[#ef4444] text-[#ef4444] text-lg sm:text-xl font-bold transition-all duration-200 flex items-center justify-center active:scale-90 disabled:opacity-50"
         >
           ✕
         </button>
-        <div className="text-center min-w-[3rem]">
-          <div className="text-xl font-bold text-white">{currentIndex + 1}</div>
-          <div className="text-xs text-[var(--muted)]">of {total}</div>
+        <div className="text-center min-w-[2.5rem]">
+          <div className="text-lg font-bold text-white">{currentIndex + 1}</div>
+          <div className="text-[10px] text-[var(--muted)]">of {total}</div>
         </div>
         <button
           onClick={() => handleSwipe("right")}
           disabled={!!exitDirection}
-          className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-[var(--card)] border-2 border-[#22c55e] text-[#22c55e] text-xl sm:text-2xl hover:bg-[#22c55e] hover:text-white transition-all duration-200 flex items-center justify-center active:scale-90 disabled:opacity-50"
-          title="Like — saves to watchlist"
+          className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-[var(--card)] border-2 border-[#22c55e] text-[#22c55e] text-lg sm:text-xl transition-all duration-200 flex items-center justify-center active:scale-90 disabled:opacity-50"
         >
           ♥
         </button>
@@ -497,75 +532,79 @@ function SearchTab({ onResultsLoaded }: { onResultsLoaded: (results: DiscoverPro
     }
   };
 
-  const inp = "w-full bg-[#0a0a0a] border border-[var(--border)] rounded px-2 py-1.5 text-sm text-white";
+  const inp = "w-full bg-[#0a0a0a] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-white placeholder-[var(--muted)]";
 
   return (
-    <div className="space-y-2">
-      <div className="grid grid-cols-3 gap-2">
-        <div>
-          <label className="block text-[10px] text-[var(--muted)] mb-0.5">State</label>
-          <select className={inp} value={filters.state} onChange={(e) => setFilters({ ...filters, state: e.target.value })}>
-            {["NT", "QLD", "WA", "SA", "NSW", "VIC", "TAS", "ACT"].map((s) => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
+    <div className="space-y-3">
+      <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-3 space-y-3">
+        <div className="grid grid-cols-3 gap-2">
+          <div>
+            <label className="block text-[11px] text-[var(--muted)] mb-1">State</label>
+            <select className={inp} value={filters.state} onChange={(e) => setFilters({ ...filters, state: e.target.value })}>
+              {["NT", "QLD", "WA", "SA", "NSW", "VIC", "TAS", "ACT"].map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-[11px] text-[var(--muted)] mb-1">Suburb</label>
+            <input className={inp} placeholder="Gray" value={filters.suburb} onChange={(e) => setFilters({ ...filters, suburb: e.target.value })} />
+          </div>
+          <div>
+            <label className="block text-[11px] text-[var(--muted)] mb-1">Postcode</label>
+            <input className={inp} placeholder="0830" value={filters.postcode} onChange={(e) => setFilters({ ...filters, postcode: e.target.value })} />
+          </div>
         </div>
-        <div>
-          <label className="block text-[10px] text-[var(--muted)] mb-0.5">Suburb</label>
-          <input className={inp} placeholder="Gray" value={filters.suburb} onChange={(e) => setFilters({ ...filters, suburb: e.target.value })} />
+        <div className="grid grid-cols-3 gap-2">
+          <div>
+            <label className="block text-[11px] text-[var(--muted)] mb-1">Min $</label>
+            <input type="number" className={inp} value={filters.minPrice || ""} onChange={(e) => setFilters({ ...filters, minPrice: +e.target.value })} />
+          </div>
+          <div>
+            <label className="block text-[11px] text-[var(--muted)] mb-1">Max $</label>
+            <input type="number" className={inp} value={filters.maxPrice || ""} onChange={(e) => setFilters({ ...filters, maxPrice: +e.target.value })} />
+          </div>
+          <div>
+            <label className="block text-[11px] text-[var(--muted)] mb-1">Beds</label>
+            <input type="number" className={inp} value={filters.minBedrooms || ""} onChange={(e) => setFilters({ ...filters, minBedrooms: +e.target.value })} />
+          </div>
         </div>
-        <div>
-          <label className="block text-[10px] text-[var(--muted)] mb-0.5">Postcode</label>
-          <input className={inp} placeholder="0830" value={filters.postcode} onChange={(e) => setFilters({ ...filters, postcode: e.target.value })} />
+
+        <div className="flex gap-1">
+          {["House", "ApartmentUnitFlat", "Townhouse", "VacantLand"].map((pt) => (
+            <button
+              key={pt}
+              type="button"
+              onClick={() => {
+                const has = filters.propertyTypes.includes(pt);
+                setFilters({
+                  ...filters,
+                  propertyTypes: has
+                    ? filters.propertyTypes.filter((t) => t !== pt)
+                    : [...filters.propertyTypes, pt],
+                });
+              }}
+              className={`flex-1 py-1.5 rounded-md text-[11px] font-medium transition-colors ${
+                filters.propertyTypes.includes(pt)
+                  ? "bg-[#22c55e] text-white"
+                  : "bg-[#1a1a1a] text-[var(--muted)]"
+              }`}
+            >
+              {pt === "ApartmentUnitFlat" ? "Unit" : pt === "VacantLand" ? "Land" : pt}
+            </button>
+          ))}
         </div>
-        <div>
-          <label className="block text-[10px] text-[var(--muted)] mb-0.5">Min $</label>
-          <input type="number" className={inp} value={filters.minPrice || ""} onChange={(e) => setFilters({ ...filters, minPrice: +e.target.value })} />
-        </div>
-        <div>
-          <label className="block text-[10px] text-[var(--muted)] mb-0.5">Max $</label>
-          <input type="number" className={inp} value={filters.maxPrice || ""} onChange={(e) => setFilters({ ...filters, maxPrice: +e.target.value })} />
-        </div>
-        <div>
-          <label className="block text-[10px] text-[var(--muted)] mb-0.5">Beds</label>
-          <input type="number" className={inp} value={filters.minBedrooms || ""} onChange={(e) => setFilters({ ...filters, minBedrooms: +e.target.value })} />
-        </div>
+
+        <button
+          onClick={handleSearch}
+          disabled={loading}
+          className="w-full bg-[#3b82f6] text-white py-2.5 rounded-lg text-sm font-medium disabled:opacity-50"
+        >
+          {loading ? "Searching..." : "Search"}
+        </button>
+
+        {error && <p className="text-xs text-[#ef4444]">{error}</p>}
       </div>
-
-      <div className="flex gap-1">
-        {["House", "ApartmentUnitFlat", "Townhouse", "VacantLand"].map((pt) => (
-          <button
-            key={pt}
-            type="button"
-            onClick={() => {
-              const has = filters.propertyTypes.includes(pt);
-              setFilters({
-                ...filters,
-                propertyTypes: has
-                  ? filters.propertyTypes.filter((t) => t !== pt)
-                  : [...filters.propertyTypes, pt],
-              });
-            }}
-            className={`flex-1 py-1 rounded text-[10px] font-medium transition-colors ${
-              filters.propertyTypes.includes(pt)
-                ? "bg-[#22c55e] text-white"
-                : "bg-[var(--border)] text-[var(--muted)]"
-            }`}
-          >
-            {pt === "ApartmentUnitFlat" ? "Unit" : pt === "VacantLand" ? "Land" : pt}
-          </button>
-        ))}
-      </div>
-
-      <button
-        onClick={handleSearch}
-        disabled={loading}
-        className="w-full bg-[#3b82f6] text-white py-2 rounded-lg text-sm font-medium disabled:opacity-50"
-      >
-        {loading ? "Searching..." : "Search"}
-      </button>
-
-      {error && <p className="text-xs text-[#ef4444]">{error}</p>}
 
       {results.length > 0 && (
         <button
@@ -610,57 +649,58 @@ function WatchlistTab({
 
     return (
       <div key={item.id} className="bg-[var(--card)] border border-[var(--border)] rounded-xl overflow-hidden">
-        <div className="flex">
+        {/* Tappable card — opens listing */}
+        <a
+          href={p.listingUrl || "#"}
+          target={p.listingUrl ? "_blank" : undefined}
+          rel="noopener noreferrer"
+          className="flex"
+        >
           {p.imageUrl ? (
-            <img src={p.imageUrl} alt={p.address} className="w-36 h-36 object-cover flex-shrink-0" />
+            <img src={p.imageUrl} alt={p.address} className="w-28 h-28 sm:w-36 sm:h-36 object-cover flex-shrink-0" />
           ) : (
-            <div className="w-36 h-36 bg-[var(--border)] flex items-center justify-center text-3xl flex-shrink-0">🏠</div>
+            <div className="w-28 h-28 sm:w-36 sm:h-36 bg-[var(--border)] flex items-center justify-center text-2xl flex-shrink-0">🏠</div>
           )}
-          <div className="p-3 flex-1 min-w-0">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="font-medium text-sm truncate">{p.address}</p>
-                <p className="text-xs text-[var(--muted)]">{p.suburb}, {p.state} {p.postcode}</p>
+          <div className="p-2.5 flex-1 min-w-0">
+            <div className="flex items-start justify-between gap-1">
+              <div className="min-w-0">
+                <p className="font-medium text-sm truncate">{p.address || p.suburb}</p>
+                <p className="text-[11px] text-[var(--muted)]">{p.suburb}, {p.state} {p.postcode}</p>
               </div>
               {grossYield > 0 && (
-                <span className={`text-xs font-bold ${grossYield >= 7 ? "text-[#22c55e]" : grossYield >= 5 ? "text-yellow-400" : "text-[#ef4444]"}`}>
+                <span className={`text-xs font-bold whitespace-nowrap ${grossYield >= 7 ? "text-[#22c55e]" : grossYield >= 5 ? "text-yellow-400" : "text-[#ef4444]"}`}>
                   {grossYield.toFixed(1)}%
                 </span>
               )}
             </div>
-            <p className="text-sm font-bold text-[#3b82f6] mt-1">{formatCurrency(totalPrice)}</p>
-            <div className="grid grid-cols-3 gap-1 text-xs mt-2 text-[var(--muted)]">
-              {p.estimatedWeeklyRent > 0 && <span>Rent: ${p.estimatedWeeklyRent}/wk</span>}
-              <span>Stamp: {formatCurrency(stampDuty)}</span>
-              {buildBonus > 0 && <span className="text-[#22c55e]">Bonus: -{formatCurrency(buildBonus)}</span>}
+            <p className="text-sm font-bold text-[#3b82f6] mt-1">
+              {totalPrice > 0 ? formatCurrency(totalPrice) : (p as DiscoverProperty & { displayPrice?: string }).displayPrice || "Contact Agent"}
+            </p>
+            <div className="flex gap-2 text-[11px] mt-1 text-[var(--muted)]">
+              {p.bedrooms != null && <span>{p.bedrooms} bed</span>}
+              {p.bathrooms != null && <span>{p.bathrooms} bath</span>}
+              {p.carSpaces != null && <span>{p.carSpaces} car</span>}
             </div>
-            {p.estimatedWeeklyRent > 0 && (
-              <p className={`text-xs font-medium mt-1 ${weeklyCashFlow >= 0 ? "text-[#22c55e]" : "text-[#ef4444]"}`}>
-                Cash flow: {weeklyCashFlow >= 0 ? "+" : ""}{formatCurrency(weeklyCashFlow)}/wk
-              </p>
+            {p.listingUrl && (
+              <p className="text-[10px] text-[#3b82f6] mt-1">Tap to view listing</p>
             )}
           </div>
-        </div>
-        <div className="border-t border-[var(--border)] px-3 py-2 flex items-center justify-between">
-          <div className="flex gap-2">
+        </a>
+        <div className="border-t border-[var(--border)] px-3 py-1.5 flex items-center justify-between">
+          <div className="flex gap-3">
             {item.status === "liked" ? (
-              <button onClick={() => onUpdateStatus(item.id, "passed")} className="text-xs text-[var(--muted)] hover:text-[#ef4444]">
-                Move to Passed
+              <button onClick={() => onUpdateStatus(item.id, "passed")} className="text-[11px] text-[var(--muted)] active:text-[#ef4444]">
+                Pass
               </button>
             ) : (
-              <button onClick={() => onUpdateStatus(item.id, "liked")} className="text-xs text-[var(--muted)] hover:text-[#22c55e]">
-                Move to Liked
+              <button onClick={() => onUpdateStatus(item.id, "liked")} className="text-[11px] text-[var(--muted)] active:text-[#22c55e]">
+                Like
               </button>
             )}
-            <button onClick={() => onRemove(item.id)} className="text-xs text-[var(--muted)] hover:text-[#ef4444]">
+            <button onClick={() => onRemove(item.id)} className="text-[11px] text-[var(--muted)] active:text-[#ef4444]">
               Remove
             </button>
           </div>
-          {p.listingUrl && (
-            <a href={p.listingUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-[#3b82f6] hover:underline">
-              View listing &rarr;
-            </a>
-          )}
         </div>
       </div>
     );
