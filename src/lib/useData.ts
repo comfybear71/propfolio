@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   properties as defaultProperties,
   loans as defaultLoans,
@@ -190,4 +190,57 @@ export function useWatchlist() {
   }, []);
 
   return { watchlist: data, setWatchlist: setData, addToWatchlist, updateStatus, removeFromWatchlist, loaded };
+}
+
+export interface BorrowingSettings {
+  stuartGross: number;
+  sasitronGross: number;
+  rentalIncome60: number;
+  rentalIncome72: number;
+  monthlyExpenses: number;
+  existingDebt: number;
+  landPrice: number;
+  buildCost: number;
+  depositPercent: number;
+  newLoanRate: number;
+  newLoanTerm: number;
+  expectedRent: number;
+  useEquity: boolean;
+  claimBuildBonus: boolean;
+}
+
+export function useBorrowingSettings(defaults: BorrowingSettings) {
+  const [data, setData] = useState<BorrowingSettings>(defaults);
+  const [loaded, setLoaded] = useState(false);
+  const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    fetch("/api/borrowing-settings")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d && d.stuartGross !== undefined) {
+          setData((prev) => ({ ...prev, ...d }));
+        }
+        setLoaded(true);
+      })
+      .catch(() => setLoaded(true));
+  }, []);
+
+  const update = useCallback((partial: Partial<BorrowingSettings>) => {
+    setData((prev) => {
+      const next = { ...prev, ...partial };
+      // Debounced auto-save — waits 800ms after last change
+      if (saveTimeout.current) clearTimeout(saveTimeout.current);
+      saveTimeout.current = setTimeout(() => {
+        fetch("/api/borrowing-settings", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(next),
+        }).catch(() => {});
+      }, 800);
+      return next;
+    });
+  }, []);
+
+  return { settings: data, update, loaded };
 }

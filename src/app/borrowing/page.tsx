@@ -1,34 +1,47 @@
 "use client";
 
-import { useState } from "react";
 import {
-  properties,
-  loans,
-  incomes,
+  properties as defaultProperties,
+  loans as defaultLoans,
+  incomes as defaultIncomes,
   formatCurrency,
   formatCurrencyExact,
 } from "@/lib/data";
+import { useProperties, useLoans, useIncomes, useBorrowingSettings } from "@/lib/useData";
 
 export default function BorrowingPage() {
-  // Editable scenario inputs
-  const [stuartGross, setStuartGross] = useState(incomes[0].annualGross);
-  const [sasitronGross, setSasitronGross] = useState(incomes[1].annualGross);
-  const [rentalIncome60, setRentalIncome60] = useState(properties[0].weeklyRent * 52);
-  const [rentalIncome72, setRentalIncome72] = useState(properties[1].weeklyRent * 52);
-  const [monthlyExpenses, setMonthlyExpenses] = useState(5000);
-  const [existingDebt, setExistingDebt] = useState(
-    loans.reduce((s, l) => s + l.repaymentAmount * (l.repaymentFrequency === "fortnightly" ? 26 : 12), 0)
-  );
+  const { properties, loaded: pLoaded } = useProperties();
+  const { loans, loaded: lLoaded } = useLoans();
+  const { incomes, loaded: iLoaded } = useIncomes();
 
-  // New Build Scenario
-  const [landPrice, setLandPrice] = useState(250000);
-  const [buildCost, setBuildCost] = useState(350000);
-  const [depositPercent, setDepositPercent] = useState(20);
-  const [newLoanRate, setNewLoanRate] = useState(6.5);
-  const [newLoanTerm, setNewLoanTerm] = useState(30);
-  const [expectedRent, setExpectedRent] = useState(600);
-  const [useEquity, setUseEquity] = useState(true);
-  const [claimBuildBonus, setClaimBuildBonus] = useState(true);
+  // Default values from DB data or fallbacks
+  const defaultDebt = defaultLoans.reduce((s, l) => s + l.repaymentAmount * (l.repaymentFrequency === "fortnightly" ? 26 : 12), 0);
+
+  const { settings: s, update, loaded: sLoaded } = useBorrowingSettings({
+    stuartGross: defaultIncomes[0]?.annualGross ?? 157073,
+    sasitronGross: defaultIncomes[1]?.annualGross ?? 87882,
+    rentalIncome60: (defaultProperties[0]?.weeklyRent ?? 1400) * 52,
+    rentalIncome72: (defaultProperties[1]?.weeklyRent ?? 1000) * 52,
+    monthlyExpenses: 5000,
+    existingDebt: defaultDebt,
+    landPrice: 250000,
+    buildCost: 350000,
+    depositPercent: 20,
+    newLoanRate: 6.5,
+    newLoanTerm: 30,
+    expectedRent: 600,
+    useEquity: true,
+    claimBuildBonus: true,
+  });
+
+  if (!pLoaded || !lLoaded || !iLoaded || !sLoaded) {
+    return <div className="text-center text-[var(--muted)] py-20">Loading...</div>;
+  }
+
+  // Use DB values
+  const { stuartGross, sasitronGross, rentalIncome60, rentalIncome72,
+    monthlyExpenses, existingDebt, landPrice, buildCost, depositPercent,
+    newLoanRate, newLoanTerm, expectedRent, useEquity, claimBuildBonus } = s;
 
   // Bank assessment rate (typically 3% buffer)
   const assessmentBuffer = 3.0;
@@ -71,7 +84,7 @@ export default function BorrowingPage() {
   const newLoanAmount = totalPropertyCost - depositAmount;
   const totalCashNeeded = depositAmount + stampDutyOnLand - ntBuildBonus;
 
-  // Equity available
+  // Equity available — from actual DB data
   const usableEquity = properties.reduce((sum, p) => {
     const loan = loans.find((l) => l.propertyId === p.id);
     const available = p.currentValue * 0.8 - (loan?.balance ?? 0);
@@ -129,14 +142,14 @@ export default function BorrowingPage() {
         {/* Income & Expenses */}
         <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-5">
           <h3 className="font-semibold mb-4">Your Financials</h3>
-          <p className="text-xs text-[var(--muted)] mb-4">Adjust these to see how they affect borrowing capacity</p>
+          <p className="text-xs text-[var(--muted)] mb-4">Adjust these to see how they affect borrowing capacity — changes auto-save</p>
           <div className="space-y-3">
-            <InputRow label="Stuart Gross Annual" value={stuartGross} onChange={setStuartGross} prefix="$" />
-            <InputRow label="Sasitron Gross Annual" value={sasitronGross} onChange={setSasitronGross} prefix="$" />
-            <InputRow label="60 Bagshaw Rent (annual)" value={rentalIncome60} onChange={setRentalIncome60} prefix="$" />
-            <InputRow label="72 Bagshaw Rent (annual)" value={rentalIncome72} onChange={setRentalIncome72} prefix="$" />
-            <InputRow label="Monthly Living Expenses" value={monthlyExpenses} onChange={setMonthlyExpenses} prefix="$" />
-            <InputRow label="Annual Existing Debt Payments" value={existingDebt} onChange={setExistingDebt} prefix="$" />
+            <InputRow label="Stuart Gross Annual" value={stuartGross} onChange={(v) => update({ stuartGross: v })} prefix="$" />
+            <InputRow label="Sasitron Gross Annual" value={sasitronGross} onChange={(v) => update({ sasitronGross: v })} prefix="$" />
+            <InputRow label="60 Bagshaw Rent (annual)" value={rentalIncome60} onChange={(v) => update({ rentalIncome60: v })} prefix="$" />
+            <InputRow label="72 Bagshaw Rent (annual)" value={rentalIncome72} onChange={(v) => update({ rentalIncome72: v })} prefix="$" />
+            <InputRow label="Monthly Living Expenses" value={monthlyExpenses} onChange={(v) => update({ monthlyExpenses: v })} prefix="$" />
+            <InputRow label="Annual Existing Debt Payments" value={existingDebt} onChange={(v) => update({ existingDebt: v })} prefix="$" />
             <div className="border-t border-[var(--card-border)] pt-3 mt-3 space-y-2">
               <InfoRow label="Total Assessed Income" value={formatCurrency(totalAssessedIncome)} />
               <InfoRow label="(Rent shaded at 80%)" value={formatCurrency(totalRentalIncome)} muted />
@@ -152,22 +165,22 @@ export default function BorrowingPage() {
           <h3 className="font-semibold mb-2">New Build Scenario</h3>
           <p className="text-xs text-[var(--muted)] mb-4">Land + build package — stamp duty on land only</p>
           <div className="space-y-3">
-            <InputRow label="Land Price" value={landPrice} onChange={setLandPrice} prefix="$" />
-            <InputRow label="Build Cost" value={buildCost} onChange={setBuildCost} prefix="$" />
-            <InputRow label="Deposit" value={depositPercent} onChange={setDepositPercent} suffix="%" />
-            <InputRow label="Interest Rate" value={newLoanRate} onChange={setNewLoanRate} suffix="%" step={0.05} />
-            <InputRow label="Loan Term" value={newLoanTerm} onChange={setNewLoanTerm} suffix="years" />
-            <InputRow label="Expected Weekly Rent" value={expectedRent} onChange={setExpectedRent} prefix="$" />
+            <InputRow label="Land Price" value={landPrice} onChange={(v) => update({ landPrice: v })} prefix="$" />
+            <InputRow label="Build Cost" value={buildCost} onChange={(v) => update({ buildCost: v })} prefix="$" />
+            <InputRow label="Deposit" value={depositPercent} onChange={(v) => update({ depositPercent: v })} suffix="%" />
+            <InputRow label="Interest Rate" value={newLoanRate} onChange={(v) => update({ newLoanRate: v })} suffix="%" step={0.05} />
+            <InputRow label="Loan Term" value={newLoanTerm} onChange={(v) => update({ newLoanTerm: v })} suffix="years" />
+            <InputRow label="Expected Weekly Rent" value={expectedRent} onChange={(v) => update({ expectedRent: v })} prefix="$" />
             <div className="flex items-center justify-between">
               <span className="text-sm text-[var(--muted)]">Use equity for deposit</span>
-              <button onClick={() => setUseEquity(!useEquity)}
+              <button onClick={() => update({ useEquity: !useEquity })}
                 className={`px-3 py-1 rounded text-xs font-medium ${useEquity ? "bg-[var(--positive)]/20 text-[var(--positive)]" : "bg-[var(--card-border)] text-[var(--muted)]"}`}>
                 {useEquity ? "Yes" : "No"}
               </button>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-[var(--muted)]">Claim NT BuildBonus $30K</span>
-              <button onClick={() => setClaimBuildBonus(!claimBuildBonus)}
+              <button onClick={() => update({ claimBuildBonus: !claimBuildBonus })}
                 className={`px-3 py-1 rounded text-xs font-medium ${claimBuildBonus ? "bg-[var(--positive)]/20 text-[var(--positive)]" : "bg-[var(--card-border)] text-[var(--muted)]"}`}>
                 {claimBuildBonus ? "Yes" : "No"}
               </button>
