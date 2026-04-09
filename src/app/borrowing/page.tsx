@@ -129,8 +129,28 @@ export default function BorrowingPage() {
         <p className="text-[var(--muted)]">Plan your next new build using equity, the NT BuildBonus, and tax benefits</p>
       </div>
 
-      {/* Current Position */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      {/* Affordability verdict — most important, shown first */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className={`p-4 rounded-lg text-center text-sm font-bold ${
+          fundingGap <= 0
+            ? "bg-[var(--positive)]/10 text-[var(--positive)] border border-[var(--positive)]/30"
+            : "bg-[var(--negative)]/10 text-[var(--negative)] border border-[var(--negative)]/30"
+        }`}>
+          {fundingGap <= 0
+            ? `Fully funded — ${formatCurrency(Math.abs(fundingGap))} surplus`
+            : `Shortfall of ${formatCurrency(fundingGap)}`}
+        </div>
+        <div className={`p-4 rounded-lg text-center text-sm font-bold ${
+          canAfford
+            ? "bg-[var(--positive)]/10 text-[var(--positive)] border border-[var(--positive)]/30"
+            : "bg-[var(--negative)]/10 text-[var(--negative)] border border-[var(--negative)]/30"
+        }`}>
+          {canAfford ? "Within borrowing capacity" : "Exceeds borrowing capacity"}
+        </div>
+      </div>
+
+      {/* Key numbers */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         <Card label="Max Borrowing (DSR)" value={formatCurrency(Math.max(0, maxLoanAmount))} positive />
         <Card label="Max Borrowing (DTI 6x)" value={formatCurrency(Math.max(0, remainingDTI))} positive />
         <Card label="Usable Equity (80%)" value={formatCurrency(usableEquity)} positive />
@@ -138,6 +158,64 @@ export default function BorrowingPage() {
         <Card label="Total Available" value={formatCurrency(usableEquity + offsetCash)} positive />
       </div>
 
+      {/* Results — New Build Breakdown */}
+      <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-5">
+        <h3 className="font-semibold mb-4">New Build Breakdown</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="space-y-2">
+            <h4 className="text-xs font-medium text-[var(--muted)] uppercase tracking-wide">Costs</h4>
+            <InfoRow label="Land" value={formatCurrency(landPrice)} />
+            <InfoRow label="Build" value={formatCurrency(buildCost)} />
+            <InfoRow label="Total Property Cost" value={formatCurrency(totalPropertyCost)} />
+            <InfoRow label="Stamp Duty (land only)" value={formatCurrency(stampDutyOnLand)} />
+            {claimBuildBonus && <InfoRow label="NT BuildBonus Grant" value={`-${formatCurrency(ntBuildBonus)}`} positive />}
+            <div className="border-t border-[var(--card-border)] pt-2">
+              <InfoRow label={`Deposit (${depositPercent}%)`} value={formatCurrency(depositAmount)} />
+              <InfoRow label="Loan Amount" value={formatCurrency(newLoanAmount)} />
+              <InfoRow label="LVR" value={`${newLVR.toFixed(1)}%`} />
+              {needsLMI && (
+                <div className="text-xs text-[var(--negative)] bg-[var(--negative)]/10 rounded px-2 py-1 mt-1">
+                  LVR over 80% — LMI will apply
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <h4 className="text-xs font-medium text-[var(--muted)] uppercase tracking-wide">Funding</h4>
+            <InfoRow label="Cash Required" value={formatCurrency(Math.max(0, totalCashNeeded))} />
+            {useEquity && <InfoRow label="Available Equity" value={formatCurrency(usableEquity)} positive />}
+            <InfoRow label="Offset Cash" value={formatCurrency(offsetCash)} positive />
+            <InfoRow label="Total Available" value={formatCurrency(totalAvailableFunds)} positive />
+          </div>
+
+          <div className="space-y-2">
+            <h4 className="text-xs font-medium text-[var(--muted)] uppercase tracking-wide">Cash Flow & Tax</h4>
+            <InfoRow label="Monthly Repayment" value={formatCurrencyExact(newMonthlyRepayment)} />
+            <InfoRow label="Annual Repayment" value={formatCurrency(newAnnualRepayment)} />
+            <InfoRow label="Annual Rent" value={formatCurrency(newAnnualRent)} positive />
+            <InfoRow label="Gross Yield" value={`${newGrossYield.toFixed(2)}%`} />
+            <InfoRow label="Cash Flow (before tax)" value={`${newCashFlow >= 0 ? "+" : ""}${formatCurrency(newCashFlow)}/yr`}
+              positive={newCashFlow >= 0} />
+            <div className="border-t border-[var(--card-border)] pt-2">
+              <InfoRow label="Depreciation Saving" value={`${formatCurrency(depreciationTaxSaving)}/yr`} positive />
+              {negGearingTaxSaving > 0 && (
+                <InfoRow label="Neg. Gearing Saving" value={`${formatCurrency(negGearingTaxSaving)}/yr`} positive />
+              )}
+              <InfoRow label="Total Tax Benefits" value={`${formatCurrency(totalTaxBenefits)}/yr`} positive />
+              <InfoRow label="After-Tax Cash Flow" value={`${formatCurrency(newCashFlow + totalTaxBenefits)}/yr`}
+                positive={newCashFlow + totalTaxBenefits >= 0} />
+              <InfoRow label="Weekly Out-of-Pocket" value={
+                newCashFlow + totalTaxBenefits >= 0
+                  ? `+${formatCurrency((newCashFlow + totalTaxBenefits) / 52)}/wk`
+                  : `${formatCurrency((newCashFlow + totalTaxBenefits) / 52)}/wk`
+              } positive={newCashFlow + totalTaxBenefits >= 0} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Input cards */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Income & Expenses */}
         <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-5">
@@ -184,83 +262,6 @@ export default function BorrowingPage() {
                 className={`px-3 py-1 rounded text-xs font-medium ${claimBuildBonus ? "bg-[var(--positive)]/20 text-[var(--positive)]" : "bg-[var(--card-border)] text-[var(--muted)]"}`}>
                 {claimBuildBonus ? "Yes" : "No"}
               </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Results */}
-      <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-5">
-        <h3 className="font-semibold mb-4">New Build Breakdown</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="space-y-2">
-            <h4 className="text-xs font-medium text-[var(--muted)] uppercase tracking-wide">Costs</h4>
-            <InfoRow label="Land" value={formatCurrency(landPrice)} />
-            <InfoRow label="Build" value={formatCurrency(buildCost)} />
-            <InfoRow label="Total Property Cost" value={formatCurrency(totalPropertyCost)} />
-            <InfoRow label="Stamp Duty (land only)" value={formatCurrency(stampDutyOnLand)} />
-            {claimBuildBonus && <InfoRow label="NT BuildBonus Grant" value={`-${formatCurrency(ntBuildBonus)}`} positive />}
-            <div className="border-t border-[var(--card-border)] pt-2">
-              <InfoRow label="Deposit ({depositPercent}%)" value={formatCurrency(depositAmount)} />
-              <InfoRow label="Loan Amount" value={formatCurrency(newLoanAmount)} />
-              <InfoRow label="LVR" value={`${newLVR.toFixed(1)}%`} />
-              {needsLMI && (
-                <div className="text-xs text-[var(--negative)] bg-[var(--negative)]/10 rounded px-2 py-1 mt-1">
-                  LVR over 80% — LMI will apply
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <h4 className="text-xs font-medium text-[var(--muted)] uppercase tracking-wide">Funding</h4>
-            <InfoRow label="Cash Required" value={formatCurrency(Math.max(0, totalCashNeeded))} />
-            {useEquity && <InfoRow label="Available Equity" value={formatCurrency(usableEquity)} positive />}
-            <InfoRow label="Offset Cash" value={formatCurrency(offsetCash)} positive />
-            <InfoRow label="Total Available" value={formatCurrency(totalAvailableFunds)} positive />
-            <div className="border-t border-[var(--card-border)] pt-2">
-              {fundingGap <= 0 ? (
-                <div className="p-2 rounded text-xs text-center bg-[var(--positive)]/10 text-[var(--positive)] border border-[var(--positive)]/30">
-                  Fully funded — {formatCurrency(Math.abs(fundingGap))} surplus
-                </div>
-              ) : (
-                <div className="p-2 rounded text-xs text-center bg-[var(--negative)]/10 text-[var(--negative)] border border-[var(--negative)]/30">
-                  Shortfall of {formatCurrency(fundingGap)}
-                </div>
-              )}
-            </div>
-            <div className="border-t border-[var(--card-border)] pt-2">
-              <div className={`p-2 rounded text-xs text-center ${
-                canAfford
-                  ? "bg-[var(--positive)]/10 text-[var(--positive)] border border-[var(--positive)]/30"
-                  : "bg-[var(--negative)]/10 text-[var(--negative)] border border-[var(--negative)]/30"
-              }`}>
-                {canAfford ? "Within borrowing capacity" : "Exceeds borrowing capacity"}
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <h4 className="text-xs font-medium text-[var(--muted)] uppercase tracking-wide">Cash Flow & Tax</h4>
-            <InfoRow label="Monthly Repayment" value={formatCurrencyExact(newMonthlyRepayment)} />
-            <InfoRow label="Annual Repayment" value={formatCurrency(newAnnualRepayment)} />
-            <InfoRow label="Annual Rent" value={formatCurrency(newAnnualRent)} positive />
-            <InfoRow label="Gross Yield" value={`${newGrossYield.toFixed(2)}%`} />
-            <InfoRow label="Cash Flow (before tax)" value={`${newCashFlow >= 0 ? "+" : ""}${formatCurrency(newCashFlow)}/yr`}
-              positive={newCashFlow >= 0} />
-            <div className="border-t border-[var(--card-border)] pt-2">
-              <InfoRow label="Depreciation Saving" value={`${formatCurrency(depreciationTaxSaving)}/yr`} positive />
-              {negGearingTaxSaving > 0 && (
-                <InfoRow label="Neg. Gearing Saving" value={`${formatCurrency(negGearingTaxSaving)}/yr`} positive />
-              )}
-              <InfoRow label="Total Tax Benefits" value={`${formatCurrency(totalTaxBenefits)}/yr`} positive />
-              <InfoRow label="After-Tax Cash Flow" value={`${formatCurrency(newCashFlow + totalTaxBenefits)}/yr`}
-                positive={newCashFlow + totalTaxBenefits >= 0} />
-              <InfoRow label="Weekly Out-of-Pocket" value={
-                newCashFlow + totalTaxBenefits >= 0
-                  ? `+${formatCurrency((newCashFlow + totalTaxBenefits) / 52)}/wk`
-                  : `${formatCurrency((newCashFlow + totalTaxBenefits) / 52)}/wk`
-              } positive={newCashFlow + totalTaxBenefits >= 0} />
             </div>
           </div>
         </div>

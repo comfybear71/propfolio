@@ -244,3 +244,48 @@ export function useBorrowingSettings(defaults: BorrowingSettings) {
 
   return { settings: data, update, loaded };
 }
+
+export interface StrategySettings {
+  plan: { year: number; landCost: number; buildCost: number; expectedRent: number; interestRate: number; depositPercent: number }[];
+  growthRate: number;
+  rentGrowth: number;
+}
+
+export function useStrategySettings(defaults: StrategySettings) {
+  const [data, setData] = useState<StrategySettings>(defaults);
+  const [loaded, setLoaded] = useState(false);
+  const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    fetch("/api/strategy-settings")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d && d.plan !== undefined) {
+          setData((prev) => ({ ...prev, ...d }));
+        }
+        setLoaded(true);
+      })
+      .catch(() => setLoaded(true));
+  }, []);
+
+  const save = useCallback((next: StrategySettings) => {
+    if (saveTimeout.current) clearTimeout(saveTimeout.current);
+    saveTimeout.current = setTimeout(() => {
+      fetch("/api/strategy-settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(next),
+      }).catch(() => {});
+    }, 800);
+  }, []);
+
+  const update = useCallback((partial: Partial<StrategySettings>) => {
+    setData((prev) => {
+      const next = { ...prev, ...partial };
+      save(next);
+      return next;
+    });
+  }, [save]);
+
+  return { strategy: data, update, loaded };
+}
