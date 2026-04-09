@@ -34,4 +34,18 @@ export async function getDb(): Promise<Db | null> {
   return client.db("propfolio");
 }
 
+// Export a lazy promise for NextAuth MongoDB adapter
+// The adapter needs a Promise<MongoClient>, so we create one that resolves when first used
+export const mongoClientPromise: Promise<MongoClient> = new Promise((resolve, reject) => {
+  // Defer until runtime when env vars are available
+  setTimeout(() => {
+    const promise = getClientPromise();
+    if (!promise) {
+      reject(new Error("MONGODB_URI not configured"));
+      return;
+    }
+    promise.then(resolve, reject);
+  }, 0);
+});
+
 export default getClientPromise;

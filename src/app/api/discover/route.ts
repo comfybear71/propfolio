@@ -5,8 +5,8 @@ export async function GET() {
   const ctx = await getAuthDb();
   if (ctx.error) return ctx.error;
   const { db, userId } = ctx;
-  const items = await db.collection("watchlist").find({ userId }).sort({ updatedAt: -1 }).toArray();
-  return NextResponse.json(items);
+  const properties = await db.collection("discover_properties").find({ userId }).sort({ createdAt: -1 }).toArray();
+  return NextResponse.json(properties);
 }
 
 export async function POST(req: NextRequest) {
@@ -14,14 +14,19 @@ export async function POST(req: NextRequest) {
   if (ctx.error) return ctx.error;
   const { db, userId } = ctx;
   const body = await req.json();
-  const now = new Date().toISOString();
-  const item = { ...body, userId, createdAt: body.createdAt || now, updatedAt: now };
-  await db.collection("watchlist").updateOne(
-    { propertyId: body.propertyId, userId },
-    { $set: item },
-    { upsert: true }
-  );
-  return NextResponse.json({ ok: true, item });
+
+  if (Array.isArray(body)) {
+    const properties = body.map((p) => ({ ...p, userId, createdAt: p.createdAt || new Date().toISOString() }));
+    if (properties.length > 0) {
+      await db.collection("discover_properties").insertMany(properties);
+    }
+    return NextResponse.json({ ok: true, count: properties.length });
+  }
+
+  await db.collection("discover_properties").insertOne({
+    ...body, userId, createdAt: body.createdAt || new Date().toISOString(),
+  });
+  return NextResponse.json({ ok: true });
 }
 
 export async function PUT(req: NextRequest) {
@@ -31,9 +36,10 @@ export async function PUT(req: NextRequest) {
   const body = await req.json();
   const { _id, ...update } = body;
   void _id;
-  await db.collection("watchlist").updateOne(
+  await db.collection("discover_properties").updateOne(
     { id: body.id, userId },
-    { $set: { ...update, updatedAt: new Date().toISOString() } }
+    { $set: { ...update, userId } },
+    { upsert: true }
   );
   return NextResponse.json({ ok: true });
 }
@@ -45,6 +51,6 @@ export async function DELETE(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ ok: false, error: "Missing id" }, { status: 400 });
-  await db.collection("watchlist").deleteOne({ id, userId });
+  await db.collection("discover_properties").deleteOne({ id, userId });
   return NextResponse.json({ ok: true });
 }

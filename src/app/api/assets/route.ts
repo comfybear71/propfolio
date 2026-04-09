@@ -1,21 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/mongodb";
+import { getAuthDb } from "@/lib/apiAuth";
 
 export async function GET() {
-  const db = await getDb();
-  if (!db) return NextResponse.json([]);
-  const assets = await db.collection("assets").find().toArray();
+  const ctx = await getAuthDb();
+  if (ctx.error) return ctx.error;
+  const { db, userId } = ctx;
+  const assets = await db.collection("assets").find({ userId }).toArray();
   return NextResponse.json(assets);
 }
 
 export async function PUT(req: NextRequest) {
-  const db = await getDb();
-  if (!db) return NextResponse.json({ ok: false, error: "No database" }, { status: 503 });
+  const ctx = await getAuthDb();
+  if (ctx.error) return ctx.error;
+  const { db, userId } = ctx;
   const body = await req.json();
-  // Replace all assets at once
-  await db.collection("assets").deleteMany({});
+  await db.collection("assets").deleteMany({ userId });
   if (body.length > 0) {
-    await db.collection("assets").insertMany(body);
+    await db.collection("assets").insertMany(body.map((a: Record<string, unknown>) => ({ ...a, userId })));
   }
   return NextResponse.json({ ok: true });
 }

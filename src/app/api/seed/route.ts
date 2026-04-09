@@ -1,34 +1,39 @@
 import { NextResponse } from "next/server";
-import { getDb } from "@/lib/mongodb";
+import { getAuthDb } from "@/lib/apiAuth";
 import { properties, loans, incomes, defaultExpenses, defaultAssets } from "@/lib/data";
 
 export async function POST() {
-  const db = await getDb();
-  if (!db) return NextResponse.json({ ok: false, error: "No database connection" }, { status: 503 });
+  const ctx = await getAuthDb();
+  if (ctx.error) return ctx.error;
+  const { db, userId } = ctx;
 
-  const propCount = await db.collection("properties").countDocuments();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const addUserId = (items: any[]) =>
+    items.map((item) => ({ ...item, userId }));
+
+  const propCount = await db.collection("properties").countDocuments({ userId });
   if (propCount === 0) {
-    await db.collection("properties").insertMany(properties.map((p) => ({ ...p })));
+    await db.collection("properties").insertMany(addUserId(properties));
   }
 
-  const loanCount = await db.collection("loans").countDocuments();
+  const loanCount = await db.collection("loans").countDocuments({ userId });
   if (loanCount === 0) {
-    await db.collection("loans").insertMany(loans.map((l) => ({ ...l })));
+    await db.collection("loans").insertMany(addUserId(loans));
   }
 
-  const incomeCount = await db.collection("incomes").countDocuments();
+  const incomeCount = await db.collection("incomes").countDocuments({ userId });
   if (incomeCount === 0) {
-    await db.collection("incomes").insertMany(incomes.map((i) => ({ ...i })));
+    await db.collection("incomes").insertMany(addUserId(incomes));
   }
 
-  const expenseCount = await db.collection("expenses").countDocuments();
+  const expenseCount = await db.collection("expenses").countDocuments({ userId });
   if (expenseCount === 0) {
-    await db.collection("expenses").insertMany(defaultExpenses.map((e) => ({ ...e })));
+    await db.collection("expenses").insertMany(addUserId(defaultExpenses));
   }
 
-  const assetCount = await db.collection("assets").countDocuments();
+  const assetCount = await db.collection("assets").countDocuments({ userId });
   if (assetCount === 0) {
-    await db.collection("assets").insertMany(defaultAssets.map((a) => ({ ...a })));
+    await db.collection("assets").insertMany(addUserId(defaultAssets));
   }
 
   return NextResponse.json({

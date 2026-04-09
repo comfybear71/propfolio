@@ -1,21 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/mongodb";
+import { getAuthDb } from "@/lib/apiAuth";
 
 export async function GET() {
-  const db = await getDb();
-  if (!db) return NextResponse.json([]);
-  const incomes = await db.collection("incomes").find().toArray();
+  const ctx = await getAuthDb();
+  if (ctx.error) return ctx.error;
+  const { db, userId } = ctx;
+  const incomes = await db.collection("incomes").find({ userId }).toArray();
   return NextResponse.json(incomes);
 }
 
 export async function PUT(req: NextRequest) {
-  const db = await getDb();
-  if (!db) return NextResponse.json({ ok: false, error: "No database" }, { status: 503 });
+  const ctx = await getAuthDb();
+  if (ctx.error) return ctx.error;
+  const { db, userId } = ctx;
   const body = await req.json();
   const { _id, ...update } = body;
+  void _id;
   await db.collection("incomes").updateOne(
-    { id: body.id },
-    { $set: update },
+    { id: body.id, userId },
+    { $set: { ...update, userId } },
     { upsert: true }
   );
   return NextResponse.json({ ok: true });
