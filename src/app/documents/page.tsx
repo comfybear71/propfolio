@@ -136,6 +136,7 @@ export default function DocumentsPage() {
   const [filterPerson, setFilterPerson] = useState<string>("All");
   const [filterStatus, setFilterStatus] = useState<string>("All");
   const [uploading, setUploading] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [ocrResult, setOcrResult] = useState<{ docId: string; data: Record<string, unknown> } | null>(null);
   const [ocrLoading, setOcrLoading] = useState<string | null>(null);
   const [ocrError, setOcrError] = useState<string | null>(null);
@@ -180,6 +181,9 @@ export default function DocumentsPage() {
 
   async function uploadFile(documentId: string, category: string, person: string, file: File) {
     setUploading(documentId);
+    setUploadError(null);
+    setOcrError(null);
+    setOcrResult(null);
     const formData = new FormData();
     formData.append("file", file);
     formData.append("documentId", documentId);
@@ -215,9 +219,11 @@ export default function DocumentsPage() {
           }
           setOcrLoading(null);
         }
+      } else {
+        setUploadError(`Upload failed: ${data.error || res.status}`);
       }
     } catch (e) {
-      console.error("Upload failed:", e);
+      setUploadError("Upload failed: " + String(e));
     }
     setUploading(null);
   }
@@ -269,6 +275,14 @@ export default function DocumentsPage() {
           Everything your broker and bank will need — track what you have and what&apos;s missing
         </p>
       </div>
+
+      {/* Error display */}
+      {uploadError && (
+        <div className="bg-[var(--negative)]/10 border border-[var(--negative)]/30 rounded-lg p-3 text-sm text-[var(--negative)] flex justify-between items-center">
+          <span>{uploadError}</span>
+          <button onClick={() => setUploadError(null)} className="text-xs ml-2">dismiss</button>
+        </div>
+      )}
 
       {/* Readiness Summary */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
