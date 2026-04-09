@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
 
     const message = await anthropic.messages.create({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 2000,
+      max_tokens: 4096,
       messages: [{ role: "user", content }],
     });
 
@@ -53,8 +53,37 @@ export async function POST(req: NextRequest) {
 
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
-      const data = JSON.parse(jsonMatch[0]);
-      return NextResponse.json({ ok: true, data, documentType: data.documentType || docCategory });
+      try {
+        const data = JSON.parse(jsonMatch[0]);
+        return NextResponse.json({ ok: true, data, documentType: data.documentType || docCategory });
+      } catch {
+        // JSON was truncated or malformed — try to fix common issues
+        let fixedJson = jsonMatch[0];
+        // Close any unclosed arrays
+        const openBrackets = (fixedJson.match(/\[/g) || []).length;
+        const closeBrackets = (fixedJson.match(/\]/g) || []).length;
+        for (let i = 0; i < openBrackets - closeBrackets; i++) fixedJson += "]";
+        // Close any unclosed objects
+        const openBraces = (fixedJson.match(/\{/g) || []).length;
+        const closeBraces = (fixedJson.match(/\}/g) || []).length;
+        for (let i = 0; i < openBraces - closeBraces; i++) fixedJson += "}";
+        // Remove trailing comma before closing bracket/brace
+        fixedJson = fixedJson.replace(/,\s*([}\]])/g, "$1");
+        try {
+          const data = JSON.parse(fixedJson);
+          return NextResponse.json({ ok: true, data, documentType: data.documentType || docCategory, partial: true });
+        } catch {
+          // Last resort — extract just the expensesByCategory if present
+          const expMatch = responseText.match(/"expensesByCategory"\s*:\s*\{[^}]+\}/);
+          if (expMatch) {
+            try {
+              const partial = JSON.parse(`{${expMatch[0]}}`);
+              return NextResponse.json({ ok: true, data: { documentType: "expense_statement", ...partial }, partial: true });
+            } catch { /* give up */ }
+          }
+          return NextResponse.json({ ok: true, data: {}, raw: responseText.substring(0, 500), error: "Could not parse response" });
+        }
+      }
     }
 
     return NextResponse.json({ ok: true, data: {}, raw: responseText });
@@ -123,9 +152,7 @@ Read EVERY transaction and categorise each one. Return this JSON:
   "bankName": "",
   "statementPeriod": "",
   "monthsCovered": 1,
-  "transactions": [
-    {"date": "YYYY-MM-DD", "description": "", "amount": 0, "type": "debit|credit", "category": ""}
-  ],
+  "transactionCount": 0,
   "expensesByCategory": {
     "Groceries": 0,
     "Fuel & Transport": 0,
@@ -150,15 +177,16 @@ Read EVERY transaction and categorise each one. Return this JSON:
 }
 
 RULES:
-1. Read EVERY transaction line — do not skip any
-2. Categorise each debit transaction using the categories above
-3. "expensesByCategory" should be the TOTAL for each category across the statement period
-4. "monthlyAverage" = totalDebits / monthsCovered
+1. Read ALL transactions but DO NOT list them individually — only provide TOTALS by category
+2. "expensesByCategory" = TOTAL spent in each category across the entire statement
+3. "monthlyAverage" = totalDebits / monthsCovered
+4. "transactionCount" = how many transactions you read
 5. Credits (income) go into "incomeItems" — identify salary, rent, transfers
 6. Debits are expenses — categorise by merchant name
 7. Common Australian merchants: Woolworths/Coles = Groceries, BP/Shell/Ampol = Fuel, Netflix/Stan = Subscriptions
 8. If the statement covers multiple months, calculate monthly averages
-9. Return ONLY JSON`;
+9. IMPORTANT: Keep response short — category TOTALS only, not individual transactions
+10. Return ONLY JSON`;
   }
 
   if (category.includes("Assets") || category.includes("Bank") || category.includes("Savings")) {
