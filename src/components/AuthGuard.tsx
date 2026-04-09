@@ -9,19 +9,29 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
 
+  const isLoginPage = pathname === "/login";
+
   useEffect(() => {
-    if (status === "unauthenticated" && pathname !== "/login") {
-      router.push("/login");
+    // Redirect to login if not authenticated
+    if (status === "unauthenticated" && !isLoginPage) {
+      router.replace("/login");
     }
-  }, [status, pathname, router]);
+    // Redirect away from login if already authenticated
+    if (status === "authenticated" && isLoginPage) {
+      router.replace("/");
+    }
+  }, [status, isLoginPage, router]);
 
-  if (status === "loading") {
-    return <div className="text-center text-[var(--muted)] py-20">Loading...</div>;
+  // On login page: always show it (unless authenticated, handled by redirect above)
+  if (isLoginPage) {
+    return <>{children}</>;
   }
 
-  if (status === "unauthenticated" && pathname !== "/login") {
-    return null;
+  // On any other page: only show if authenticated
+  if (status === "authenticated") {
+    return <>{children}</>;
   }
 
-  return <>{children}</>;
+  // Loading or unauthenticated — show nothing (redirect will happen)
+  return <div className="text-center text-[var(--muted)] py-20">Loading...</div>;
 }

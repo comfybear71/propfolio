@@ -2,16 +2,21 @@ import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
 import { MongoDBAdapter } from "@auth/mongodb-adapter";
-import { mongoClientPromise, getDb } from "./mongodb";
+import { getAdapterClient, getDb } from "./mongodb";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
-  adapter: MongoDBAdapter(mongoClientPromise, {
+  adapter: MongoDBAdapter(getAdapterClient(), {
     databaseName: "propfolio",
   }),
   providers: [
     Google({
-      clientId: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      authorization: {
+        params: {
+          prompt: "select_account",
+        },
+      },
     }),
     Credentials({
       name: "Email",
@@ -27,14 +32,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const email = (credentials.email as string).toLowerCase().trim();
         const password = credentials.password as string;
 
-        // Find user by email
         const user = await db.collection("users").findOne({ email });
 
         if (!user) {
-          // Auto-register new users with email/password
+          // Auto-register new users
           const result = await db.collection("users").insertOne({
             email,
-            password, // In production, hash this with bcrypt
+            password,
             name: email.split("@")[0],
             createdAt: new Date().toISOString(),
           });
@@ -45,7 +49,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           };
         }
 
-        // Check password
         if (user.password !== password) return null;
 
         return {
@@ -77,4 +80,5 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   pages: {
     signIn: "/login",
   },
+  debug: process.env.NODE_ENV === "development",
 });

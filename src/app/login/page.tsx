@@ -29,8 +29,15 @@ export default function LoginPage() {
     }
   };
 
-  const handleGoogleLogin = () => {
-    signIn("google", { callbackUrl: "/" });
+  const handleGoogleLogin = async () => {
+    setError("");
+    setLoading(true);
+    try {
+      await signIn("google", { callbackUrl: "/" });
+    } catch (err) {
+      setError("Google sign-in failed: " + String(err));
+      setLoading(false);
+    }
   };
 
   return (
