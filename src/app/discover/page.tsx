@@ -38,26 +38,25 @@ export default function DiscoverPage() {
 
   if (!wLoaded) return <div className="text-center text-[var(--muted)] py-20">Loading...</div>;
 
+  const likedCount = watchlist.filter((w) => w.status === "liked").length;
   const tabs: { key: Tab; label: string }[] = [
     { key: "search", label: "Search" },
-    { key: "swipe", label: `Swipe${searchResults.length > 0 ? ` (${searchResults.length})` : ""}` },
-    { key: "watchlist", label: `Watchlist (${watchlist.filter((w) => w.status === "liked").length})` },
+    { key: "swipe", label: `Swipe${searchResults.length > 0 ? `(${searchResults.length})` : ""}` },
+    { key: "watchlist", label: `Watching(${likedCount})` },
   ];
 
   return (
-    <div className="space-y-4 sm:space-y-6 max-w-4xl mx-auto">
-      <h2 className="text-xl sm:text-2xl font-bold">Discover</h2>
-
+    <div className="space-y-3 max-w-4xl mx-auto">
       {/* Tab bar */}
-      <div className="flex gap-1 bg-[var(--card)] rounded-lg p-1 border border-[var(--border)]">
+      <div className="flex gap-0.5 bg-[var(--card)] rounded-lg p-0.5 border border-[var(--border)]">
         {tabs.map((t) => (
           <button
             key={t.key}
             onClick={() => setActiveTab(t.key)}
-            className={`flex-1 py-2 px-2 sm:px-3 rounded-md text-xs sm:text-sm font-medium transition-colors ${
+            className={`flex-1 py-1.5 px-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap ${
               activeTab === t.key
                 ? "bg-[#3b82f6] text-white"
-                : "text-[var(--muted)] hover:text-white hover:bg-[var(--border)]"
+                : "text-[var(--muted)] hover:text-white"
             }`}
           >
             {t.label}
