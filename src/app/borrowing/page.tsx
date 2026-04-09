@@ -149,6 +149,66 @@ export default function BorrowingPage() {
         </div>
       </div>
 
+      {/* Purchase readiness progress */}
+      <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card)] p-5">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold">Purchase Readiness</h3>
+          <span className={`text-2xl font-bold ${fundingGap <= 0 && canAfford ? "text-[var(--positive)]" : "text-[var(--accent)]"}`}>
+            {Math.round(Math.min(100, ((fundingGap <= 0 ? 50 : Math.max(0, (totalAvailableFunds / totalCashNeeded) * 50)) + (canAfford ? 50 : Math.min(49, (maxLoanAmount / newLoanAmount) * 50)))))}%
+          </span>
+        </div>
+        <div className="space-y-3">
+          {/* Deposit progress */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs text-[var(--muted)]">Deposit & Costs</span>
+              <span className="text-xs font-medium">
+                {formatCurrency(totalAvailableFunds)} of {formatCurrency(totalCashNeeded)}
+                {fundingGap <= 0 && <span className="text-[var(--positive)] ml-1">Ready</span>}
+              </span>
+            </div>
+            <div className="w-full h-2 bg-[var(--card-border)] rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${fundingGap <= 0 ? "bg-[var(--positive)]" : "bg-[var(--accent)]"}`}
+                style={{ width: `${Math.min(100, (totalAvailableFunds / totalCashNeeded) * 100)}%` }}
+              />
+            </div>
+          </div>
+          {/* Borrowing capacity */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs text-[var(--muted)]">Borrowing Capacity (DSR)</span>
+              <span className="text-xs font-medium">
+                {formatCurrency(newLoanAmount)} of {formatCurrency(Math.max(0, maxLoanAmount))} max
+                {canAfford && <span className="text-[var(--positive)] ml-1">Ready</span>}
+              </span>
+            </div>
+            <div className="w-full h-2 bg-[var(--card-border)] rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${canAfford ? "bg-[var(--positive)]" : "bg-[var(--negative)]"}`}
+                style={{ width: `${Math.min(100, maxLoanAmount > 0 ? (canAfford ? 100 : (maxLoanAmount / newLoanAmount) * 100) : 0)}%` }}
+              />
+            </div>
+          </div>
+          {/* DTI capacity */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs text-[var(--muted)]">DTI Capacity (6x limit)</span>
+              <span className="text-xs font-medium">
+                {formatCurrency(newLoanAmount)} of {formatCurrency(Math.max(0, remainingDTI))} remaining
+                {newLoanAmount <= remainingDTI && <span className="text-[var(--positive)] ml-1">Ready</span>}
+              </span>
+            </div>
+            <div className="w-full h-2 bg-[var(--card-border)] rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${newLoanAmount <= remainingDTI ? "bg-[var(--positive)]" : "bg-[var(--negative)]"}`}
+                style={{ width: `${Math.min(100, remainingDTI > 0 ? (newLoanAmount <= remainingDTI ? 100 : (remainingDTI / newLoanAmount) * 100) : 0)}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Key numbers */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         <Card label="Max Borrowing (DSR)" value={formatCurrency(Math.max(0, maxLoanAmount))} positive />
