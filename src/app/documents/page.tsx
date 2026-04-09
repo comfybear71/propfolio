@@ -219,20 +219,28 @@ export default function DocumentsPage() {
               setOcrResult({ docId: documentId, data: ocrData.data });
               // Auto-update income if it's a payslip
               if (ocrData.data.documentType === "payslip" && ocrData.data.employeeName) {
+                const d = ocrData.data;
+                const grossPay = d.grossPay || 0;
+                const netPay = d.netPay || 0;
+                const freq = d.payFrequency === "monthly" ? 12 : d.payFrequency === "weekly" ? 52 : 26;
                 try {
                   await fetch("/api/incomes", {
                     method: "PUT",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
-                      id: `income-${ocrData.data.employeeName.toLowerCase().replace(/[^a-z]/g, "")}`,
-                      name: ocrData.data.employeeName,
-                      employer: ocrData.data.employer || "",
-                      jobTitle: ocrData.data.jobTitle || "",
-                      annualGross: ocrData.data.annualGross || ocrData.data.annualSalary || 0,
-                      annualNet: ocrData.data.annualNet || 0,
-                      netFortnightly: ocrData.data.fortnightlyNet || ocrData.data.netPay || 0,
-                      payFrequency: ocrData.data.payFrequency || "fortnightly",
-                      superRate: ocrData.data.superRate || 11.5,
+                      id: `income-${(d.employeeName as string).toLowerCase().replace(/[^a-z]/g, "")}`,
+                      name: d.employeeName,
+                      employer: d.employer || "",
+                      jobTitle: d.jobTitle || "",
+                      annualGross: d.annualSalary || d.annualGross || (grossPay * freq),
+                      annualNet: d.annualNet || (netPay * freq),
+                      grossFortnightly: d.payFrequency === "fortnightly" ? grossPay : (grossPay * freq / 26),
+                      netFortnightly: d.fortnightlyNet || (d.payFrequency === "fortnightly" ? netPay : (netPay * freq / 26)),
+                      taxWithheld: d.taxWithheld || 0,
+                      superannuation: d.superannuation || 0,
+                      superRate: d.superRate || 11.5,
+                      payFrequency: d.payFrequency || "fortnightly",
+                      hourlyRate: d.hourlyRate || 0,
                       lastUpdated: new Date().toISOString(),
                       source: "ocr-payslip",
                     }),
