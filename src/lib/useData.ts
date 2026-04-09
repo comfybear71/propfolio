@@ -85,7 +85,12 @@ export function useIncomes() {
     }).catch(() => {});
   }, []);
 
-  return { incomes: data, setIncomes: setData, saveIncome: save, loaded };
+  const remove = useCallback(async (id: string) => {
+    setData((prev) => prev.filter((i) => i.id !== id));
+    await fetch(`/api/incomes?id=${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => {});
+  }, []);
+
+  return { incomes: data, setIncomes: setData, saveIncome: save, removeIncome: remove, loaded };
 }
 
 export function useExpenses() {

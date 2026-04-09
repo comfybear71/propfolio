@@ -17,7 +17,7 @@ const frequencies = ["weekly", "fortnightly", "monthly", "quarterly", "annually"
 
 export default function FinancesPage() {
   const [activeTab, setActiveTab] = useState<"income" | "expenses">("income");
-  const { incomes: incomeData, saveIncome, loaded: iLoaded } = useIncomes();
+  const { incomes: incomeData, saveIncome, removeIncome, loaded: iLoaded } = useIncomes();
   const { expenses, setExpenses, saveAll: saveExpenses, loaded } = useExpenses();
   const [editingIncome, setEditingIncome] = useState<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(null);
@@ -121,12 +121,22 @@ export default function FinancesPage() {
                     <h4 className="font-semibold">{income.person}</h4>
                     <p className="text-sm text-[var(--muted)]">{income.employer}</p>
                   </div>
-                  <button
-                    onClick={() => setEditingIncome(isEditing ? null : income.id)}
-                    className="text-xs px-3 py-1 rounded border border-[var(--card-border)] hover:border-[var(--accent)] text-[var(--muted)] hover:text-[var(--accent)] transition-colors"
-                  >
-                    {isEditing ? "Done" : "Edit"}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setEditingIncome(isEditing ? null : income.id)}
+                      className="text-xs px-3 py-1 rounded border border-[var(--card-border)] hover:border-[var(--accent)] text-[var(--muted)] hover:text-[var(--accent)] transition-colors"
+                    >
+                      {isEditing ? "Done" : "Edit"}
+                    </button>
+                    {isEditing && (
+                      <button
+                        onClick={() => { if (confirm("Delete this income record?")) removeIncome(income.id); }}
+                        className="text-xs px-3 py-1 rounded border border-[var(--negative)]/30 text-[var(--negative)] hover:bg-[var(--negative)]/10 transition-colors"
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
