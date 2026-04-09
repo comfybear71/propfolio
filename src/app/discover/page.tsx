@@ -12,7 +12,6 @@ export default function DiscoverPage() {
   // All search results live in memory only — never saved to DB
   const [searchResults, setSearchResults] = useState<DiscoverProperty[]>([]);
   const [lastFilters, setLastFilters] = useState<Record<string, unknown> | null>(null);
-  const [lastApiSource, setLastApiSource] = useState<"rapidapi" | "domain">("rapidapi");
   const [nextPage, setNextPage] = useState(2);
   const [loadingMore, setLoadingMore] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("search");
@@ -21,8 +20,7 @@ export default function DiscoverPage() {
     if (!lastFilters || loadingMore) return;
     setLoadingMore(true);
     try {
-      const endpoint = lastApiSource === "rapidapi" ? "/api/rapidapi-search" : "/api/domain-search";
-      const res = await fetch(endpoint, {
+      const res = await fetch("/api/rapidapi-search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...lastFilters, pageNumber: nextPage, page: nextPage }),
@@ -34,7 +32,7 @@ export default function DiscoverPage() {
       }
     } catch { /* silently fail */ }
     setLoadingMore(false);
-  }, [lastFilters, lastApiSource, nextPage, loadingMore]);
+  }, [lastFilters, nextPage, loadingMore]);
 
   if (!wLoaded) return <div className="text-center text-[var(--muted)] py-20">Loading...</div>;
 
@@ -66,10 +64,9 @@ export default function DiscoverPage() {
 
       {activeTab === "search" && (
         <SearchTab
-          onResultsLoaded={(results, filters, apiSource) => {
+          onResultsLoaded={(results, filters) => {
             setSearchResults(results);
             setLastFilters(filters);
-            setLastApiSource(apiSource);
             setNextPage(2);
             setActiveTab("swipe");
           }}
@@ -464,7 +461,6 @@ function SwipeTab({
 /* ─── SEARCH API TAB ───────────────────────────────────────────── */
 
 function SearchTab({ onResultsLoaded }: { onResultsLoaded: (results: DiscoverProperty[], filters: Record<string, unknown>, apiSource: "rapidapi" | "domain") => void }) {
-  const [apiSource, setApiSource] = useState<"rapidapi" | "domain">("rapidapi");
   const [filters, setFilters] = useState({
     state: "NT",
     suburb: "",
@@ -485,128 +481,98 @@ function SearchTab({ onResultsLoaded }: { onResultsLoaded: (results: DiscoverPro
     setLoading(true);
     setError("");
     try {
-      const endpoint = apiSource === "rapidapi" ? "/api/rapidapi-search" : "/api/domain-search";
-      const res = await fetch(endpoint, {
+      const res = await fetch("/api/rapidapi-search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(filters),
       });
       const data = await res.json();
-      if (!data.ok) {
-        setError(data.error || "Search failed");
-        return;
-      }
+      if (!data.ok) { setError(data.error || "Search failed"); return; }
       setResults(data.results || []);
-      if (data.results?.length === 0) setError("No results found. Try a different suburb or broader filters.");
+      if (data.results?.length === 0) setError("No results found");
     } catch {
-      setError("Failed to connect to search API");
+      setError("Search failed");
     } finally {
       setLoading(false);
     }
   };
 
-  const inputClass = "w-full bg-[#0a0a0a] border border-[var(--border)] rounded px-3 py-2 text-sm text-white";
+  const inp = "w-full bg-[#0a0a0a] border border-[var(--border)] rounded px-2 py-1.5 text-sm text-white";
 
   return (
-    <div className="space-y-3">
-      <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 space-y-3">
-        {/* API source toggle */}
-        <div className="flex gap-1 bg-[#0a0a0a] rounded-lg p-0.5 border border-[var(--border)]">
-          <button
-            onClick={() => setApiSource("rapidapi")}
-            className={`flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-              apiSource === "rapidapi" ? "bg-[#3b82f6] text-white" : "text-[var(--muted)] hover:text-white"
-            }`}
-          >
-            realestate.com.au
-          </button>
-          <button
-            onClick={() => setApiSource("domain")}
-            className={`flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-              apiSource === "domain" ? "bg-[#3b82f6] text-white" : "text-[var(--muted)] hover:text-white"
-            }`}
-          >
-            Domain
-          </button>
+    <div className="space-y-2">
+      <div className="grid grid-cols-3 gap-2">
+        <div>
+          <label className="block text-[10px] text-[var(--muted)] mb-0.5">State</label>
+          <select className={inp} value={filters.state} onChange={(e) => setFilters({ ...filters, state: e.target.value })}>
+            {["NT", "QLD", "WA", "SA", "NSW", "VIC", "TAS", "ACT"].map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
         </div>
-
-        <div className="grid grid-cols-3 gap-2">
-          <div>
-            <label className="block text-xs text-[var(--muted)] mb-1">State</label>
-            <select className={inputClass} value={filters.state} onChange={(e) => setFilters({ ...filters, state: e.target.value })}>
-              {["NT", "QLD", "WA", "SA", "NSW", "VIC", "TAS", "ACT"].map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs text-[var(--muted)] mb-1">Suburb</label>
-            <input className={inputClass} placeholder="Gray" value={filters.suburb} onChange={(e) => setFilters({ ...filters, suburb: e.target.value })} />
-          </div>
-          <div>
-            <label className="block text-xs text-[var(--muted)] mb-1">Postcode</label>
-            <input className={inputClass} placeholder="0830" value={filters.postcode} onChange={(e) => setFilters({ ...filters, postcode: e.target.value })} />
-          </div>
-          <div>
-            <label className="block text-xs text-[var(--muted)] mb-1">Min $</label>
-            <input type="number" className={inputClass} value={filters.minPrice || ""} onChange={(e) => setFilters({ ...filters, minPrice: +e.target.value })} />
-          </div>
-          <div>
-            <label className="block text-xs text-[var(--muted)] mb-1">Max $</label>
-            <input type="number" className={inputClass} value={filters.maxPrice || ""} onChange={(e) => setFilters({ ...filters, maxPrice: +e.target.value })} />
-          </div>
-          <div>
-            <label className="block text-xs text-[var(--muted)] mb-1">Beds</label>
-            <input type="number" className={inputClass} value={filters.minBedrooms || ""} onChange={(e) => setFilters({ ...filters, minBedrooms: +e.target.value })} />
-          </div>
+        <div>
+          <label className="block text-[10px] text-[var(--muted)] mb-0.5">Suburb</label>
+          <input className={inp} placeholder="Gray" value={filters.suburb} onChange={(e) => setFilters({ ...filters, suburb: e.target.value })} />
         </div>
-
-        {/* Property type pills */}
-        <div className="flex gap-1.5 flex-wrap">
-          {["House", "ApartmentUnitFlat", "Townhouse", "VacantLand"].map((pt) => (
-            <button
-              key={pt}
-              type="button"
-              onClick={() => {
-                const has = filters.propertyTypes.includes(pt);
-                setFilters({
-                  ...filters,
-                  propertyTypes: has
-                    ? filters.propertyTypes.filter((t) => t !== pt)
-                    : [...filters.propertyTypes, pt],
-                });
-              }}
-              className={`px-3 py-1 rounded-full text-xs border transition-colors ${
-                filters.propertyTypes.includes(pt)
-                  ? "bg-[#3b82f6] border-[#3b82f6] text-white"
-                  : "border-[var(--border)] text-[var(--muted)] hover:border-white"
-              }`}
-            >
-              {pt === "ApartmentUnitFlat" ? "Unit" : pt === "VacantLand" ? "Land" : pt}
-            </button>
-          ))}
+        <div>
+          <label className="block text-[10px] text-[var(--muted)] mb-0.5">Postcode</label>
+          <input className={inp} placeholder="0830" value={filters.postcode} onChange={(e) => setFilters({ ...filters, postcode: e.target.value })} />
         </div>
-
-        <button
-          onClick={handleSearch}
-          disabled={loading}
-          className="w-full bg-[#3b82f6] text-white py-2.5 rounded-lg font-medium hover:bg-blue-600 transition-colors disabled:opacity-50"
-        >
-          {loading ? "Searching..." : "Search"}
-        </button>
-
-        {error && (
-          <p className="text-sm text-[#ef4444]">{error}</p>
-        )}
+        <div>
+          <label className="block text-[10px] text-[var(--muted)] mb-0.5">Min $</label>
+          <input type="number" className={inp} value={filters.minPrice || ""} onChange={(e) => setFilters({ ...filters, minPrice: +e.target.value })} />
+        </div>
+        <div>
+          <label className="block text-[10px] text-[var(--muted)] mb-0.5">Max $</label>
+          <input type="number" className={inp} value={filters.maxPrice || ""} onChange={(e) => setFilters({ ...filters, maxPrice: +e.target.value })} />
+        </div>
+        <div>
+          <label className="block text-[10px] text-[var(--muted)] mb-0.5">Beds</label>
+          <input type="number" className={inp} value={filters.minBedrooms || ""} onChange={(e) => setFilters({ ...filters, minBedrooms: +e.target.value })} />
+        </div>
       </div>
 
-      {/* Results — go straight to swiping */}
+      <div className="flex gap-1">
+        {["House", "ApartmentUnitFlat", "Townhouse", "VacantLand"].map((pt) => (
+          <button
+            key={pt}
+            type="button"
+            onClick={() => {
+              const has = filters.propertyTypes.includes(pt);
+              setFilters({
+                ...filters,
+                propertyTypes: has
+                  ? filters.propertyTypes.filter((t) => t !== pt)
+                  : [...filters.propertyTypes, pt],
+              });
+            }}
+            className={`flex-1 py-1 rounded text-[10px] font-medium transition-colors ${
+              filters.propertyTypes.includes(pt)
+                ? "bg-[#22c55e] text-white"
+                : "bg-[var(--border)] text-[var(--muted)]"
+            }`}
+          >
+            {pt === "ApartmentUnitFlat" ? "Unit" : pt === "VacantLand" ? "Land" : pt}
+          </button>
+        ))}
+      </div>
+
+      <button
+        onClick={handleSearch}
+        disabled={loading}
+        className="w-full bg-[#3b82f6] text-white py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+      >
+        {loading ? "Searching..." : "Search"}
+      </button>
+
+      {error && <p className="text-xs text-[#ef4444]">{error}</p>}
+
       {results.length > 0 && (
         <button
-          onClick={() => onResultsLoaded(results, filters, apiSource)}
-          className="w-full bg-[#22c55e] text-white py-3 rounded-lg font-bold hover:bg-green-600 transition-colors"
+          onClick={() => onResultsLoaded(results, filters, "rapidapi")}
+          className="w-full bg-[#22c55e] text-white py-2 rounded-lg text-sm font-bold"
         >
-          Swipe {results.length} Properties &rarr;
+          Swipe {results.length} Properties
         </button>
       )}
     </div>
