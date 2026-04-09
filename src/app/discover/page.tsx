@@ -46,10 +46,7 @@ export default function DiscoverPage() {
 
   return (
     <div className="space-y-4 sm:space-y-6 max-w-4xl mx-auto">
-      <div>
-        <h2 className="text-xl sm:text-2xl font-bold mb-1">Discover Properties</h2>
-        <p className="text-[var(--muted)] text-sm">Search, swipe to like or pass — only liked properties save to your watchlist</p>
-      </div>
+      <h2 className="text-xl sm:text-2xl font-bold">Discover</h2>
 
       {/* Tab bar */}
       <div className="flex gap-1 bg-[var(--card)] rounded-lg p-1 border border-[var(--border)]">
@@ -203,20 +200,16 @@ function SwipeTab({
 
   if (properties.length === 0) {
     return (
-      <div className="text-center py-20">
-        <p className="text-5xl mb-4">🔍</p>
-        <p className="text-lg font-medium mb-2">No properties loaded</p>
-        <p className="text-[var(--muted)] text-sm">Use the Search tab to find properties first</p>
+      <div className="text-center py-16 text-[var(--muted)]">
+        <p className="text-sm">Search for properties first</p>
       </div>
     );
   }
 
   if (currentIndex >= total) {
     return (
-      <div className="text-center py-20">
-        <p className="text-5xl mb-4">🏠</p>
-        <p className="text-lg font-medium mb-2">You&apos;ve seen all {total} properties</p>
-        <p className="text-[var(--muted)] text-sm mb-4">Search again or check your watchlist</p>
+      <div className="text-center py-16">
+        <p className="text-sm text-[var(--muted)] mb-3">End of results</p>
         <button
           onClick={() => { setCurrentIndex(0); setShowAffordability(false); }}
           className="text-sm text-[#3b82f6] hover:underline"
@@ -325,19 +318,13 @@ function SwipeTab({
           onMouseUp={onMouseUp}
           onMouseLeave={onMouseUp}
         >
-          {/* Swipe indicators */}
-          <div
-            className="absolute top-4 left-4 z-10 bg-green-500/90 text-white px-4 py-1.5 rounded-lg text-lg font-bold rotate-[-12deg] transition-opacity duration-150"
-            style={{ opacity: dragX > 50 ? Math.min((dragX - 50) / 100, 1) : 0 }}
-          >
-            LIKE ♥
-          </div>
-          <div
-            className="absolute top-4 right-4 z-10 bg-red-500/90 text-white px-4 py-1.5 rounded-lg text-lg font-bold rotate-[12deg] transition-opacity duration-150"
-            style={{ opacity: dragX < -50 ? Math.min((-dragX - 50) / 100, 1) : 0 }}
-          >
-            PASS ✕
-          </div>
+          {/* Swipe direction tint */}
+          {dragX > 50 && (
+            <div className="absolute inset-0 bg-green-500/20 z-10 pointer-events-none rounded-xl" />
+          )}
+          {dragX < -50 && (
+            <div className="absolute inset-0 bg-red-500/20 z-10 pointer-events-none rounded-xl" />
+          )}
 
           {/* Property image — shorter on mobile */}
           {current.imageUrl ? (
@@ -522,36 +509,29 @@ function SearchTab({ onResultsLoaded }: { onResultsLoaded: (results: DiscoverPro
   const inputClass = "w-full bg-[#0a0a0a] border border-[var(--border)] rounded px-3 py-2 text-sm text-white";
 
   return (
-    <div className="space-y-4">
-      <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="font-bold text-lg">Search Properties</h3>
-          <div className="flex gap-1 bg-[#0a0a0a] rounded-lg p-0.5 border border-[var(--border)]">
-            <button
-              onClick={() => setApiSource("rapidapi")}
-              className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
-                apiSource === "rapidapi" ? "bg-[#3b82f6] text-white" : "text-[var(--muted)] hover:text-white"
-              }`}
-            >
-              realestate.com.au
-            </button>
-            <button
-              onClick={() => setApiSource("domain")}
-              className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
-                apiSource === "domain" ? "bg-[#3b82f6] text-white" : "text-[var(--muted)] hover:text-white"
-              }`}
-            >
-              Domain
-            </button>
-          </div>
+    <div className="space-y-3">
+      <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 space-y-3">
+        {/* API source toggle */}
+        <div className="flex gap-1 bg-[#0a0a0a] rounded-lg p-0.5 border border-[var(--border)]">
+          <button
+            onClick={() => setApiSource("rapidapi")}
+            className={`flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+              apiSource === "rapidapi" ? "bg-[#3b82f6] text-white" : "text-[var(--muted)] hover:text-white"
+            }`}
+          >
+            realestate.com.au
+          </button>
+          <button
+            onClick={() => setApiSource("domain")}
+            className={`flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+              apiSource === "domain" ? "bg-[#3b82f6] text-white" : "text-[var(--muted)] hover:text-white"
+            }`}
+          >
+            Domain
+          </button>
         </div>
-        <p className="text-xs text-[var(--muted)]">
-          {apiSource === "rapidapi"
-            ? "Search listings from realestate.com.au via RapidAPI. Enter a suburb name for best results."
-            : "Search listings from domain.com.au. Requires Agents & Listings API access."}
-        </p>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-3 gap-2">
           <div>
             <label className="block text-xs text-[var(--muted)] mb-1">State</label>
             <select className={inputClass} value={filters.state} onChange={(e) => setFilters({ ...filters, state: e.target.value })}>
@@ -562,113 +542,73 @@ function SearchTab({ onResultsLoaded }: { onResultsLoaded: (results: DiscoverPro
           </div>
           <div>
             <label className="block text-xs text-[var(--muted)] mb-1">Suburb</label>
-            <input className={inputClass} placeholder="e.g. Gray" value={filters.suburb} onChange={(e) => setFilters({ ...filters, suburb: e.target.value })} />
+            <input className={inputClass} placeholder="Gray" value={filters.suburb} onChange={(e) => setFilters({ ...filters, suburb: e.target.value })} />
           </div>
           <div>
             <label className="block text-xs text-[var(--muted)] mb-1">Postcode</label>
-            <input className={inputClass} placeholder="e.g. 0830" value={filters.postcode} onChange={(e) => setFilters({ ...filters, postcode: e.target.value })} />
+            <input className={inputClass} placeholder="0830" value={filters.postcode} onChange={(e) => setFilters({ ...filters, postcode: e.target.value })} />
           </div>
           <div>
-            <label className="block text-xs text-[var(--muted)] mb-1">Min Price</label>
+            <label className="block text-xs text-[var(--muted)] mb-1">Min $</label>
             <input type="number" className={inputClass} value={filters.minPrice || ""} onChange={(e) => setFilters({ ...filters, minPrice: +e.target.value })} />
           </div>
           <div>
-            <label className="block text-xs text-[var(--muted)] mb-1">Max Price</label>
+            <label className="block text-xs text-[var(--muted)] mb-1">Max $</label>
             <input type="number" className={inputClass} value={filters.maxPrice || ""} onChange={(e) => setFilters({ ...filters, maxPrice: +e.target.value })} />
           </div>
           <div>
-            <label className="block text-xs text-[var(--muted)] mb-1">Min Beds</label>
+            <label className="block text-xs text-[var(--muted)] mb-1">Beds</label>
             <input type="number" className={inputClass} value={filters.minBedrooms || ""} onChange={(e) => setFilters({ ...filters, minBedrooms: +e.target.value })} />
           </div>
         </div>
 
-        <div>
-          <label className="block text-xs text-[var(--muted)] mb-1">Property Type</label>
-          <div className="flex gap-2 flex-wrap">
-            {["House", "ApartmentUnitFlat", "Townhouse", "VacantLand"].map((pt) => (
-              <button
-                key={pt}
-                type="button"
-                onClick={() => {
-                  const has = filters.propertyTypes.includes(pt);
-                  setFilters({
-                    ...filters,
-                    propertyTypes: has
-                      ? filters.propertyTypes.filter((t) => t !== pt)
-                      : [...filters.propertyTypes, pt],
-                  });
-                }}
-                className={`px-3 py-1 rounded-full text-xs border transition-colors ${
-                  filters.propertyTypes.includes(pt)
-                    ? "bg-[#3b82f6] border-[#3b82f6] text-white"
-                    : "border-[var(--border)] text-[var(--muted)] hover:border-white"
-                }`}
-              >
-                {pt === "ApartmentUnitFlat" ? "Unit" : pt === "VacantLand" ? "Land" : pt}
-              </button>
-            ))}
-          </div>
+        {/* Property type pills */}
+        <div className="flex gap-1.5 flex-wrap">
+          {["House", "ApartmentUnitFlat", "Townhouse", "VacantLand"].map((pt) => (
+            <button
+              key={pt}
+              type="button"
+              onClick={() => {
+                const has = filters.propertyTypes.includes(pt);
+                setFilters({
+                  ...filters,
+                  propertyTypes: has
+                    ? filters.propertyTypes.filter((t) => t !== pt)
+                    : [...filters.propertyTypes, pt],
+                });
+              }}
+              className={`px-3 py-1 rounded-full text-xs border transition-colors ${
+                filters.propertyTypes.includes(pt)
+                  ? "bg-[#3b82f6] border-[#3b82f6] text-white"
+                  : "border-[var(--border)] text-[var(--muted)] hover:border-white"
+              }`}
+            >
+              {pt === "ApartmentUnitFlat" ? "Unit" : pt === "VacantLand" ? "Land" : pt}
+            </button>
+          ))}
         </div>
 
         <button
           onClick={handleSearch}
           disabled={loading}
-          className="w-full bg-[#3b82f6] text-white py-2 rounded-lg font-medium hover:bg-blue-600 transition-colors disabled:opacity-50"
+          className="w-full bg-[#3b82f6] text-white py-2.5 rounded-lg font-medium hover:bg-blue-600 transition-colors disabled:opacity-50"
         >
-          {loading ? "Searching..." : "Search Listings"}
+          {loading ? "Searching..." : "Search"}
         </button>
 
         {error && (
-          <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-sm text-[#ef4444]">
-            {error}
-          </div>
+          <p className="text-sm text-[#ef4444]">{error}</p>
         )}
       </div>
 
-      {/* Results preview */}
+      {/* Results — go straight to swiping */}
       {results.length > 0 && (
-        <div className="space-y-3">
-          <button
-            onClick={() => onResultsLoaded(results, filters, apiSource)}
-            className="w-full bg-[#22c55e] text-white py-3 rounded-lg font-bold text-lg hover:bg-green-600 transition-colors"
-          >
-            Start Swiping {results.length} Properties &rarr;
-          </button>
-          <h4 className="font-medium text-sm text-[var(--muted)]">{results.length} results preview</h4>
-          {results.slice(0, 5).map((p) => (
-            <div key={p.id} className="bg-[var(--card)] border border-[var(--border)] rounded-xl overflow-hidden flex">
-              {p.imageUrl ? (
-                <img
-                  src={p.imageUrl}
-                  alt={p.address}
-                  className="w-24 h-24 object-cover flex-shrink-0"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).style.display = "none";
-                    (e.target as HTMLImageElement).nextElementSibling?.classList.remove("hidden");
-                  }}
-                />
-              ) : null}
-              <div className={`w-24 h-24 bg-[var(--border)] flex items-center justify-center text-2xl flex-shrink-0 ${p.imageUrl ? "hidden" : ""}`}>
-                🏠
-              </div>
-              <div className="p-2 flex-1 min-w-0">
-                <p className="font-medium text-sm truncate">{p.address || p.suburb}</p>
-                <p className="text-xs text-[var(--muted)]">{p.suburb}, {p.state} {p.postcode}</p>
-                <p className="text-sm font-bold text-[#3b82f6]">
-                  {p.price > 0 ? formatCurrency(p.price) : (p as DiscoverProperty & { displayPrice?: string }).displayPrice || "Contact Agent"}
-                </p>
-                <div className="flex gap-3 text-xs text-[var(--muted)]">
-                  {p.bedrooms != null && <span>{p.bedrooms} bed</span>}
-                  {p.bathrooms != null && <span>{p.bathrooms} bath</span>}
-                  {p.carSpaces != null && <span>{p.carSpaces} car</span>}
-                </div>
-              </div>
-            </div>
-          ))}
-          {results.length > 5 && (
-            <p className="text-xs text-center text-[var(--muted)]">+ {results.length - 5} more — start swiping to see all</p>
-          )}
-        </div>
+        <button
+          onClick={() => onResultsLoaded(results, filters, apiSource)}
+          className="w-full bg-[#22c55e] text-white py-3 rounded-lg font-bold hover:bg-green-600 transition-colors"
+        >
+          Swipe {results.length} Properties &rarr;
+        </button>
       )}
     </div>
   );
