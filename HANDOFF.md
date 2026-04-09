@@ -51,15 +51,24 @@ Major session — authentication, mobile UI, data persistence, OCR:
 - Document upload (Vercel Blob) + payslip OCR
 - RapidAPI property search + swipe
 
+### Additional Work (later in session)
+- Document upload working with Vercel Blob (private store)
+- General OCR for ALL document types (ID, bank, loans, insurance, etc.)
+- Payslip OCR auto-populates income fields (gross, net, employer, job title)
+- Bank statement OCR categorises all transactions into expense categories
+- Broker Pack ZIP download button
+- Dashboard "Next Property" progress tracker (75% ready to buy)
+- Fixed mobile layout for iPhone (documents page, filters, summary cards)
+- Fixed desktop layout after mobile changes
+
 ## What's Not Done Yet
-- [ ] OCR for bank statements, loan statements (only payslips done)
-- [ ] Broker pack: download as ZIP, email to broker
+- [ ] Email broker pack directly to broker
 - [ ] Smart file naming (Person_DocumentType.pdf)
-- [ ] Dashboard strategy progress indicator
 - [ ] Charts/graphs (Recharts)
-- [ ] First-time user setup wizard
+- [ ] First-time user setup wizard (generic templates for new users)
 - [ ] Remove Migrate/Seed buttons after use
 - [ ] Password hashing (needs bcrypt)
+- [ ] Duplicate income record cleanup (OCR creates new vs updating existing)
 
 ## Notes for Next Claude
 - Read `CLAUDE.md` first for full context
