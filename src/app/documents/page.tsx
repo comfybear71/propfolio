@@ -192,6 +192,12 @@ export default function DocumentsPage() {
 
     try {
       const res = await fetch("/api/files", { method: "POST", body: formData });
+      if (!res.ok) {
+        const text = await res.text();
+        setUploadError(`Upload failed (${res.status}): ${text.substring(0, 200)}`);
+        setUploading(null);
+        return;
+      }
       const data = await res.json();
       if (data.ok) {
         const updated = await fetch("/api/files").then((r) => r.json());

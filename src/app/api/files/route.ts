@@ -17,29 +17,36 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "File and documentId required" }, { status: 400 });
   }
 
-  const ext = file.name.split(".").pop() || "pdf";
-  const datePart = new Date().toISOString().slice(0, 7).replace("-", "-");
-  const safePerson = (person || "Shared").replace(/\s+/g, "");
-  const safeCategory = (category || "Other").replace(/[^a-zA-Z0-9]/g, "");
-  const safeDesc = file.name.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9_-]/g, "_");
-  const blobName = `broker-pack/${safeCategory}/${datePart}_${safeCategory}_${safePerson}_${safeDesc}.${ext}`;
+  try {
+    const ext = file.name.split(".").pop() || "pdf";
+    const datePart = new Date().toISOString().slice(0, 7).replace("-", "-");
+    const safePerson = (person || "Shared").replace(/\s+/g, "");
+    const safeCategory = (category || "Other").replace(/[^a-zA-Z0-9]/g, "");
+    const safeDesc = file.name.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9_-]/g, "_");
+    const blobName = `broker-pack/${safeCategory}/${datePart}_${safeCategory}_${safePerson}_${safeDesc}.${ext}`;
 
-  const blob = await put(blobName, file, { access: "public", addRandomSuffix: false });
+    const blob = await put(blobName, file, { access: "public", addRandomSuffix: false });
 
-  await db.collection("files").insertOne({
-    documentId,
-    filename: blobName,
-    originalName: file.name,
-    url: blob.url,
-    size: file.size,
-    contentType: file.type,
-    category,
-    person,
-    userId,
-    uploadedAt: new Date().toISOString(),
-  });
+    await db.collection("files").insertOne({
+      documentId,
+      filename: blobName,
+      originalName: file.name,
+      url: blob.url,
+      size: file.size,
+      contentType: file.type,
+      category,
+      person,
+      userId,
+      uploadedAt: new Date().toISOString(),
+    });
 
-  return NextResponse.json({ ok: true, url: blob.url, filename: blobName });
+    return NextResponse.json({ ok: true, url: blob.url, filename: blobName });
+  } catch (err) {
+    return NextResponse.json(
+      { ok: false, error: `File upload failed: ${err instanceof Error ? err.message : String(err)}` },
+      { status: 500 }
+    );
+  }
 }
 
 export async function GET(req: NextRequest) {
