@@ -1,12 +1,46 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const DOMAIN_API_KEY = process.env.DOMAIN_API_KEY;
+const DOMAIN_CLIENT_ID = process.env.DOMAIN_CLIENT_ID;
+const DOMAIN_CLIENT_SECRET = process.env.DOMAIN_CLIENT_SECRET;
+const DOMAIN_TOKEN_URL = "https://auth.domain.com.au/v1/connect/token";
 const DOMAIN_API_URL = "https://api.domain.com.au/v1/listings/residential/_search";
 
+// Cache the access token in memory to avoid re-fetching every request
+let cachedToken: string | null = null;
+let tokenExpiry = 0;
+
+async function getAccessToken(): Promise<string> {
+  // Return cached token if still valid (with 60s buffer)
+  if (cachedToken && Date.now() < tokenExpiry - 60000) {
+    return cachedToken;
+  }
+
+  const response = await fetch(DOMAIN_TOKEN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "client_credentials",
+      client_id: DOMAIN_CLIENT_ID!,
+      client_secret: DOMAIN_CLIENT_SECRET!,
+      scope: "api_listings_read",
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Token request failed: ${response.status} - ${errorText}`);
+  }
+
+  const data = await response.json();
+  cachedToken = data.access_token;
+  tokenExpiry = Date.now() + (data.expires_in || 3600) * 1000;
+  return cachedToken!;
+}
+
 export async function POST(req: NextRequest) {
-  if (!DOMAIN_API_KEY) {
+  if (!DOMAIN_CLIENT_ID || !DOMAIN_CLIENT_SECRET) {
     return NextResponse.json(
-      { ok: false, error: "Domain API key not configured. Add DOMAIN_API_KEY to your environment variables." },
+      { ok: false, error: "Domain API credentials not configured. Add DOMAIN_CLIENT_ID and DOMAIN_CLIENT_SECRET to your environment variables." },
       { status: 503 }
     );
   }
@@ -38,10 +72,12 @@ export async function POST(req: NextRequest) {
   });
 
   try {
+    const accessToken = await getAccessToken();
+
     const response = await fetch(DOMAIN_API_URL, {
       method: "POST",
       headers: {
-        "X-Api-Key": DOMAIN_API_KEY,
+        Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(searchBody),
@@ -49,6 +85,11 @@ export async function POST(req: NextRequest) {
 
     if (!response.ok) {
       const errorText = await response.text();
+      // If token expired mid-flight, clear cache so next request gets a fresh one
+      if (response.status === 401) {
+        cachedToken = null;
+        tokenExpiry = 0;
+      }
       return NextResponse.json(
         { ok: false, error: `Domain API error: ${response.status} - ${errorText}` },
         { status: response.status }
