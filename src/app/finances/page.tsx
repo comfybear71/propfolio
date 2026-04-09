@@ -10,7 +10,7 @@ import {
   type Income,
   type Expense,
 } from "@/lib/data";
-import { useIncomes, useExpenses } from "@/lib/useData";
+import { useIncomes, useExpenses, useProperties } from "@/lib/useData";
 
 const categories = ["Housing", "Transport", "Living", "Investment", "Other"];
 const frequencies = ["weekly", "fortnightly", "monthly", "quarterly", "annually"] as const;
@@ -18,6 +18,7 @@ const frequencies = ["weekly", "fortnightly", "monthly", "quarterly", "annually"
 export default function FinancesPage() {
   const [activeTab, setActiveTab] = useState<"income" | "expenses">("income");
   const { incomes: incomeData, saveIncome, removeIncome, loaded: iLoaded } = useIncomes();
+  const { properties, loaded: pLoaded } = useProperties();
   const { expenses, setExpenses, saveAll: saveExpenses, loaded } = useExpenses();
   const [editingIncome, setEditingIncome] = useState<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(null);
@@ -28,7 +29,7 @@ export default function FinancesPage() {
     saveTimer.current = setTimeout(() => saveExpenses(updated), 1000);
   }, [saveExpenses]);
 
-  if (!loaded || !iLoaded) {
+  if (!loaded || !iLoaded || !pLoaded) {
     return <div className="text-center text-[var(--muted)] py-20">Loading...</div>;
   }
 
@@ -68,7 +69,7 @@ export default function FinancesPage() {
     (sum, e) => sum + toAnnual(e.amount, e.frequency), 0
   );
   const totalAnnualNetIncome = incomeData.reduce((sum, i) => sum + i.annualNet, 0);
-  const annualRentalIncome = (1400 + 1000) * 52; // weekly rent * 52
+  const annualRentalIncome = properties.reduce((sum, p) => sum + p.weeklyRent * 52, 0);
   const totalAnnualInflow = totalAnnualNetIncome + annualRentalIncome;
 
   const tabs = [
