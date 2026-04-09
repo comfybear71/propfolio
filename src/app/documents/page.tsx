@@ -136,6 +136,8 @@ export default function DocumentsPage() {
   const [filterPerson, setFilterPerson] = useState<string>("All");
   const [filterStatus, setFilterStatus] = useState<string>("All");
   const [uploading, setUploading] = useState<string | null>(null);
+  const [ocrResult, setOcrResult] = useState<{ docId: string; data: Record<string, unknown> } | null>(null);
+  const [ocrLoading, setOcrLoading] = useState<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(null);
 
   const saveDocuments = useCallback(async (docs: Document[]) => {
@@ -175,6 +177,9 @@ export default function DocumentsPage() {
     saveDocuments(defaults);
   }
 
+  // Document names that should trigger payslip OCR
+  const payslipDocNames = ["Latest 2 payslips", "Group Certificate / PAYG Summary"];
+
   async function uploadFile(documentId: string, category: string, person: string, file: File) {
     setUploading(documentId);
     const formData = new FormData();
@@ -187,11 +192,28 @@ export default function DocumentsPage() {
       const res = await fetch("/api/files", { method: "POST", body: formData });
       const data = await res.json();
       if (data.ok) {
-        // Refresh files list
         const updated = await fetch("/api/files").then((r) => r.json());
         if (Array.isArray(updated)) setFiles(updated);
-        // Auto-set status to "have"
         updateDoc(documentId, "status", "have");
+
+        // Auto-OCR for payslips and income documents
+        const doc = documents.find((d) => d.id === documentId);
+        const isPayslip = doc && (payslipDocNames.some((n) => doc.name.includes(n)) || category === "Income & Employment");
+        const isImage = file.type.startsWith("image/") || file.type === "application/pdf";
+
+        if (isPayslip && isImage) {
+          setOcrLoading(documentId);
+          try {
+            const ocrForm = new FormData();
+            ocrForm.append("file", file);
+            const ocrRes = await fetch("/api/ocr-payslip", { method: "POST", body: ocrForm });
+            const ocrData = await ocrRes.json();
+            if (ocrData.ok && ocrData.data) {
+              setOcrResult({ docId: documentId, data: ocrData.data });
+            }
+          } catch { /* OCR is optional */ }
+          setOcrLoading(null);
+        }
       }
     } catch (e) {
       console.error("Upload failed:", e);
@@ -387,6 +409,33 @@ export default function DocumentsPage() {
                           <option value="n/a">N/A</option>
                         </select>
                       </div>
+                      {/* OCR scanning indicator */}
+                      {ocrLoading === doc.id && (
+                        <div className="text-xs text-[var(--accent)] animate-pulse">Reading document...</div>
+                      )}
+                      {/* OCR results */}
+                      {ocrResult?.docId === doc.id && (
+                        <div className="bg-[var(--accent)]/10 border border-[var(--accent)]/30 rounded-lg p-3 text-xs space-y-1 w-full max-w-sm">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-medium text-[var(--accent)]">Extracted Data</span>
+                            <button onClick={() => setOcrResult(null)} className="text-[var(--muted)] hover:text-white">dismiss</button>
+                          </div>
+                          {Object.entries(ocrResult.data).map(([key, val]) => {
+                            if (val === null || val === undefined || val === 0 || val === "" || (Array.isArray(val) && val.length === 0)) return null;
+                            const label = key.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase());
+                            const display = typeof val === "number"
+                              ? val >= 100 ? `$${val.toLocaleString()}` : String(val)
+                              : Array.isArray(val) ? val.map((v: Record<string, unknown>) => `${v.name || v.type}: ${typeof v.amount === "number" ? `$${v.amount}` : v.hours}`).join(", ")
+                              : String(val);
+                            return (
+                              <div key={key} className="flex justify-between gap-2">
+                                <span className="text-[var(--muted)]">{label}</span>
+                                <span className="text-right font-medium">{display}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                       {/* Uploaded files */}
                       {getFilesForDoc(doc.id).map((f) => (
                         <div key={f.url} className="flex items-center gap-2 text-xs">
