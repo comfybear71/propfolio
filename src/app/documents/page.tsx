@@ -217,6 +217,28 @@ export default function DocumentsPage() {
             const ocrData = await ocrRes.json();
             if (ocrData.ok && ocrData.data) {
               setOcrResult({ docId: documentId, data: ocrData.data });
+              // Auto-update income if it's a payslip
+              if (ocrData.data.documentType === "payslip" && ocrData.data.employeeName) {
+                try {
+                  await fetch("/api/incomes", {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      id: `income-${ocrData.data.employeeName.toLowerCase().replace(/[^a-z]/g, "")}`,
+                      name: ocrData.data.employeeName,
+                      employer: ocrData.data.employer || "",
+                      jobTitle: ocrData.data.jobTitle || "",
+                      annualGross: ocrData.data.annualGross || ocrData.data.annualSalary || 0,
+                      annualNet: ocrData.data.annualNet || 0,
+                      netFortnightly: ocrData.data.fortnightlyNet || ocrData.data.netPay || 0,
+                      payFrequency: ocrData.data.payFrequency || "fortnightly",
+                      superRate: ocrData.data.superRate || 11.5,
+                      lastUpdated: new Date().toISOString(),
+                      source: "ocr-payslip",
+                    }),
+                  });
+                } catch { /* income update is best-effort */ }
+              }
             } else {
               setOcrError(ocrData.error || "OCR returned no data");
             }

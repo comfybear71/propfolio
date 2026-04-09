@@ -84,8 +84,20 @@ For PAYSLIPS, extract:
   "allowances": [{"name": "", "amount": 0}],
   "deductions": [{"name": "", "amount": 0}],
   "leaveBalances": [{"type": "", "hours": 0}],
-  "annualGross": 0, "annualNet": 0, "fortnightlyNet": 0
+  "annualSalary": 0, "annualGross": 0, "annualNet": 0, "fortnightlyNet": 0
 }
+
+CRITICAL RULES for annual figures:
+1. Look for an "Annual Salary" field printed on the payslip — if it exists, use that as "annualSalary"
+2. "annualGross" = the Annual Salary field if found, otherwise grossPay * 26 for fortnightly or grossPay * 12 for monthly
+3. DO NOT calculate annual from YTD figures — YTD includes overtime and allowances that inflate the number
+4. "annualNet" = netPay * 26 for fortnightly, netPay * 12 for monthly
+5. "fortnightlyNet" = the net pay per pay period (for fortnightly payslips)
+6. grossPay and netPay should be the amounts for THIS pay period only, not YTD
+
+Different payslips look different — look for any field labelled "Annual Salary", "Base Salary", "Annual Rate", or similar.
+
+Return ONLY JSON.
 
 For TAX RETURNS / NOA, extract:
 {
