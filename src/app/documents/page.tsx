@@ -177,9 +177,6 @@ export default function DocumentsPage() {
     saveDocuments(defaults);
   }
 
-  // Document names that should trigger payslip OCR
-  const payslipDocNames = ["Latest 2 payslips", "Group Certificate / PAYG Summary"];
-
   async function uploadFile(documentId: string, category: string, person: string, file: File) {
     setUploading(documentId);
     const formData = new FormData();
@@ -196,17 +193,15 @@ export default function DocumentsPage() {
         if (Array.isArray(updated)) setFiles(updated);
         updateDoc(documentId, "status", "have");
 
-        // Auto-OCR for payslips and income documents
-        const doc = documents.find((d) => d.id === documentId);
-        const isPayslip = doc && (payslipDocNames.some((n) => doc.name.includes(n)) || category === "Income & Employment");
-        const isImage = file.type.startsWith("image/") || file.type === "application/pdf";
-
-        if (isPayslip && isImage) {
+        // Auto-OCR for all document types (images and PDFs)
+        const isReadable = file.type.startsWith("image/") || file.type === "application/pdf";
+        if (isReadable) {
           setOcrLoading(documentId);
           try {
             const ocrForm = new FormData();
             ocrForm.append("file", file);
-            const ocrRes = await fetch("/api/ocr-payslip", { method: "POST", body: ocrForm });
+            ocrForm.append("category", category);
+            const ocrRes = await fetch("/api/ocr-document", { method: "POST", body: ocrForm });
             const ocrData = await ocrRes.json();
             if (ocrData.ok && ocrData.data) {
               setOcrResult({ docId: documentId, data: ocrData.data });
@@ -457,19 +452,24 @@ export default function DocumentsPage() {
         );
       })}
 
-      {/* Broker Pack Summary */}
-      <div className="rounded-lg border border-[var(--accent)]/30 bg-[var(--accent)]/5 p-5">
+      {/* Broker Pack */}
+      <div className="rounded-lg border border-[var(--positive)]/30 bg-[var(--positive)]/5 p-5">
         <div className="flex items-center justify-between mb-3">
-          <h4 className="font-semibold">Broker Pack</h4>
-          <span className="text-sm text-[var(--muted)]">{files.length} files uploaded</span>
+          <div>
+            <h4 className="font-semibold">Broker Pack</h4>
+            <p className="text-xs text-[var(--muted)] mt-1">{files.length} files uploaded — {haveDocs}/{totalDocs} documents ready</p>
+          </div>
+          {files.length > 0 && (
+            <a
+              href="/api/broker-pack-download"
+              className="px-4 py-2 bg-[var(--positive)] text-white rounded-lg text-sm font-medium hover:bg-green-600 transition-colors"
+            >
+              Download ZIP
+            </a>
+          )}
         </div>
-        <p className="text-sm text-[var(--muted)] mb-3">
-          Upload files against each document above. Use the naming convention:<br />
-          <code className="text-xs bg-[var(--background)] px-1 py-0.5 rounded">YYYY-MM_Category_Person_Description.pdf</code>
-        </p>
         {files.length > 0 && (
           <div className="space-y-2">
-            <div className="text-xs font-medium text-[var(--muted)] uppercase tracking-wide">All Uploaded Files</div>
             <div className="max-h-48 overflow-y-auto space-y-1">
               {files.map((f) => (
                 <div key={f.url} className="flex items-center justify-between text-xs">
@@ -483,9 +483,12 @@ export default function DocumentsPage() {
               ))}
             </div>
             <p className="text-xs text-[var(--muted)] pt-2">
-              To send to your broker: download each file from the links above, or share this page URL.
+              Files are organized into folders by category: BrokerPack/Identity/, BrokerPack/Income/, etc.
             </p>
           </div>
+        )}
+        {files.length === 0 && (
+          <p className="text-sm text-[var(--muted)]">Upload documents above. When ready, download them all as one ZIP file to send to your broker.</p>
         )}
       </div>
     </div>
