@@ -384,6 +384,7 @@ export default function Dashboard() {
         </div>
       </div>
 
+      <MigrateButton />
       <SeedButton />
 
       <p className="text-center text-[var(--muted)] text-xs pt-4">
@@ -462,6 +463,56 @@ function SeedButton() {
           }`}
         >
           {status === "loading" ? "Seeding..." : status === "done" ? "Seeded" : status === "error" ? "Failed" : "Seed Database"}
+        </button>
+      </div>
+      {result && (
+        <pre className="mt-3 text-xs text-[var(--muted)] bg-[var(--background)] rounded p-2 overflow-x-auto">{result}</pre>
+      )}
+    </div>
+  );
+}
+
+function MigrateButton() {
+  const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
+  const [result, setResult] = useState<string>("");
+
+  async function handleMigrate() {
+    setStatus("loading");
+    try {
+      const res = await fetch("/api/migrate", { method: "POST" });
+      const data = await res.json();
+      if (data.ok) {
+        setStatus("done");
+        setResult(JSON.stringify(data.migrated, null, 2));
+      } else {
+        setStatus("error");
+        setResult(data.error || "Unknown error");
+      }
+    } catch (e) {
+      setStatus("error");
+      setResult(String(e));
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="text-sm font-medium">Claim Existing Data</div>
+          <div className="text-xs text-[var(--muted)]">Link pre-existing data to your account (run once after first login)</div>
+        </div>
+        <button
+          onClick={handleMigrate}
+          disabled={status === "loading" || status === "done"}
+          className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
+            status === "done"
+              ? "bg-[var(--positive)]/20 text-[var(--positive)] border border-[var(--positive)]/30"
+              : status === "error"
+              ? "bg-[var(--negative)]/20 text-[var(--negative)] border border-[var(--negative)]/30"
+              : "bg-[#22c55e] text-white hover:bg-green-600"
+          }`}
+        >
+          {status === "loading" ? "Migrating..." : status === "done" ? "Done" : status === "error" ? "Failed" : "Migrate Data"}
         </button>
       </div>
       {result && (
