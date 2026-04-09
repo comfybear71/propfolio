@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import NavBar from "@/components/NavBar";
+import AuthGuard from "@/components/AuthGuard";
 import { SessionProvider } from "next-auth/react";
 
 export const viewport: Viewport = {
@@ -24,8 +25,10 @@ export default function RootLayout({
     <html lang="en">
       <body className="antialiased min-h-screen overflow-x-hidden">
         <SessionProvider>
-          <NavBar />
-          <main className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-8">{children}</main>
+          <AuthGuard>
+            <NavBar />
+            <main className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-8">{children}</main>
+          </AuthGuard>
         </SessionProvider>
       </body>
     </html>
