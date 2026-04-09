@@ -1,22 +1,21 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { formatCurrency, type DiscoverProperty } from "@/lib/data";
-import { useDiscover, useWatchlist } from "@/lib/useData";
+import { useWatchlist } from "@/lib/useData";
 
-type Tab = "swipe" | "add" | "search" | "watchlist";
+type Tab = "search" | "swipe" | "watchlist";
 
 export default function DiscoverPage() {
-  const [activeTab, setActiveTab] = useState<Tab>("search");
-  const { addProperty, loaded: dLoaded } = useDiscover();
   const { watchlist, addToWatchlist, updateStatus, removeFromWatchlist, loaded: wLoaded } = useWatchlist();
-  // Search results feed directly into swipe — no DB save needed until liked
+
+  // All search results live in memory only — never saved to DB
   const [searchResults, setSearchResults] = useState<DiscoverProperty[]>([]);
-  // Store last search filters for auto-loading next page
   const [lastFilters, setLastFilters] = useState<Record<string, unknown> | null>(null);
   const [lastApiSource, setLastApiSource] = useState<"rapidapi" | "domain">("rapidapi");
   const [nextPage, setNextPage] = useState(2);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [activeTab, setActiveTab] = useState<Tab>("search");
 
   const loadMoreResults = useCallback(async () => {
     if (!lastFilters || loadingMore) return;
@@ -37,12 +36,11 @@ export default function DiscoverPage() {
     setLoadingMore(false);
   }, [lastFilters, lastApiSource, nextPage, loadingMore]);
 
-  if (!dLoaded || !wLoaded) return <div className="text-center text-[var(--muted)] py-20">Loading...</div>;
+  if (!wLoaded) return <div className="text-center text-[var(--muted)] py-20">Loading...</div>;
 
   const tabs: { key: Tab; label: string }[] = [
     { key: "search", label: "Search" },
-    { key: "swipe", label: `Swipe (${searchResults.length})` },
-    { key: "add", label: "Add Property" },
+    { key: "swipe", label: `Swipe${searchResults.length > 0 ? ` (${searchResults.length})` : ""}` },
     { key: "watchlist", label: `Watchlist (${watchlist.filter((w) => w.status === "liked").length})` },
   ];
 
@@ -50,7 +48,7 @@ export default function DiscoverPage() {
     <div className="space-y-6 max-w-4xl mx-auto">
       <div>
         <h2 className="text-2xl font-bold mb-1">Discover Properties</h2>
-        <p className="text-[var(--muted)]">Search for properties, swipe to like or pass — liked properties save to your watchlist</p>
+        <p className="text-[var(--muted)]">Search, swipe to like or pass — only liked properties save to your watchlist</p>
       </div>
 
       {/* Tab bar */}
@@ -86,14 +84,10 @@ export default function DiscoverPage() {
           properties={searchResults}
           watchlist={watchlist}
           onLike={(p) => addToWatchlist(p, "liked")}
-          onPass={(p) => addToWatchlist(p, "passed")}
           onNeedMore={loadMoreResults}
+          loadingMore={loadingMore}
         />
       )}
-      {loadingMore && (
-        <p className="text-center text-xs text-[var(--muted)]">Loading more properties...</p>
-      )}
-      {activeTab === "add" && <AddPropertyTab onAdd={addProperty} />}
       {activeTab === "watchlist" && (
         <WatchlistTab
           watchlist={watchlist}
@@ -111,53 +105,73 @@ function SwipeTab({
   properties,
   watchlist,
   onLike,
-  onPass,
   onNeedMore,
+  loadingMore,
 }: {
   properties: DiscoverProperty[];
   watchlist: { propertyId: string }[];
   onLike: (p: DiscoverProperty) => void;
-  onPass: (p: DiscoverProperty) => void;
   onNeedMore?: () => void;
+  loadingMore?: boolean;
 }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [dragX, setDragX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [startX, setStartX] = useState(0);
   const [showAffordability, setShowAffordability] = useState(false);
+  // Animation state
+  const [exitDirection, setExitDirection] = useState<"left" | "right" | null>(null);
+  const [entering, setEntering] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
 
-  // Filter out already-swiped properties
-  const swipedIds = new Set(watchlist.map((w) => w.propertyId));
-  const unswiped = properties.filter((p) => !swipedIds.has(p.id));
+  // Filter out already-liked properties (passed ones stay in the stack)
+  const likedIds = new Set(watchlist.filter((w) => (w as { status?: string }).status === "liked").map((w) => w.propertyId));
+  const unswiped = properties.filter((p) => !likedIds.has(p.id));
 
   const current = unswiped[currentIndex];
+  const total = unswiped.length;
+
+  // Auto-load more when 5 cards from the end
+  useEffect(() => {
+    if (total - currentIndex <= 5 && onNeedMore && !loadingMore) {
+      onNeedMore();
+    }
+  }, [currentIndex, total, onNeedMore, loadingMore]);
+
+  const advanceCard = useCallback(() => {
+    setExitDirection(null);
+    setEntering(true);
+    setCurrentIndex((i) => i + 1);
+    setShowAffordability(false);
+    setDragX(0);
+    // Remove entrance animation after it plays
+    setTimeout(() => setEntering(false), 300);
+  }, []);
 
   const handleSwipe = useCallback(
     (direction: "left" | "right") => {
-      if (!current) return;
+      if (!current || exitDirection) return;
       if (direction === "right") onLike(current);
-      else onPass(current);
-      const nextIndex = currentIndex + 1;
-      setCurrentIndex(nextIndex);
-      setDragX(0);
-      setShowAffordability(false);
-      // Auto-load more when 5 cards from the end
-      if (unswiped.length - nextIndex <= 5 && onNeedMore) {
-        onNeedMore();
-      }
+      // "left" = pass — no DB save, just skip
+      setExitDirection(direction);
+      // Wait for exit animation, then advance
+      setTimeout(advanceCard, 400);
     },
-    [current, onLike, onPass, unswiped.length, currentIndex, onNeedMore]
+    [current, onLike, exitDirection, advanceCard]
   );
 
   const onPointerDown = (e: React.PointerEvent) => {
+    if (exitDirection) return;
     setIsDragging(true);
     setStartX(e.clientX);
+    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
   };
   const onPointerMove = (e: React.PointerEvent) => {
-    if (!isDragging) return;
+    if (!isDragging || exitDirection) return;
     setDragX(e.clientX - startX);
   };
   const onPointerUp = () => {
+    if (!isDragging) return;
     setIsDragging(false);
     if (Math.abs(dragX) > 100) {
       handleSwipe(dragX > 0 ? "right" : "left");
@@ -166,20 +180,61 @@ function SwipeTab({
     }
   };
 
-  if (unswiped.length === 0 || currentIndex >= unswiped.length) {
+  if (properties.length === 0) {
     return (
       <div className="text-center py-20">
-        <p className="text-5xl mb-4">🏠</p>
-        <p className="text-lg font-medium mb-2">No more properties to swipe</p>
-        <p className="text-[var(--muted)] text-sm">Add properties manually or search via the Domain API</p>
+        <p className="text-5xl mb-4">🔍</p>
+        <p className="text-lg font-medium mb-2">No properties loaded</p>
+        <p className="text-[var(--muted)] text-sm">Use the Search tab to find properties first</p>
       </div>
     );
   }
 
+  if (currentIndex >= total) {
+    return (
+      <div className="text-center py-20">
+        <p className="text-5xl mb-4">🏠</p>
+        <p className="text-lg font-medium mb-2">You&apos;ve seen all {total} properties</p>
+        <p className="text-[var(--muted)] text-sm mb-4">Search again or check your watchlist</p>
+        <button
+          onClick={() => { setCurrentIndex(0); setShowAffordability(false); }}
+          className="text-sm text-[#3b82f6] hover:underline"
+        >
+          Start over
+        </button>
+      </div>
+    );
+  }
+
+  // Card exit transform
+  const getCardStyle = (): React.CSSProperties => {
+    if (exitDirection) {
+      return {
+        transform: `translateX(${exitDirection === "right" ? 1200 : -1200}px) rotate(${exitDirection === "right" ? 30 : -30}deg)`,
+        opacity: 0,
+        transition: "transform 0.4s ease-out, opacity 0.35s ease-out",
+        pointerEvents: "none",
+      };
+    }
+    if (entering) {
+      return {
+        animation: "cardEnter 0.3s ease-out",
+      };
+    }
+    if (isDragging) {
+      return {
+        transform: `translateX(${dragX}px) rotate(${dragX * 0.04}deg)`,
+        transition: "none",
+      };
+    }
+    return {
+      transform: "translateX(0) rotate(0deg)",
+      transition: "transform 0.25s ease-out",
+    };
+  };
+
   const grossYield = current.price > 0 ? (current.estimatedWeeklyRent * 52) / current.price * 100 : 0;
   const isLandBuild = current.propertyType === "Land+Build";
-
-  // Affordability calculations
   const totalPrice = isLandBuild ? (current.landPrice || 0) + (current.buildCost || 0) : current.price;
   const deposit20 = totalPrice * 0.2;
   const loanAmount = totalPrice - deposit20;
@@ -191,328 +246,214 @@ function SwipeTab({
   const monthlyRepayment = loanAmount * (monthlyRate * Math.pow(1 + monthlyRate, numPayments)) / (Math.pow(1 + monthlyRate, numPayments) - 1);
   const weeklyCashFlow = current.estimatedWeeklyRent - (monthlyRepayment * 12) / 52;
 
+  const progressPct = ((currentIndex + 1) / total) * 100;
+
   return (
     <div className="space-y-4">
-      <p className="text-xs text-[var(--muted)] text-center">
-        {currentIndex + 1} of {unswiped.length} &bull; Drag or use buttons below
-      </p>
+      {/* Progress bar and counter */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium text-white">
+            {currentIndex + 1} <span className="text-[var(--muted)]">of</span> {total}
+          </span>
+          {loadingMore && (
+            <span className="text-xs text-[#3b82f6] animate-pulse">Loading more...</span>
+          )}
+          <span className="text-xs text-[var(--muted)]">
+            Swipe right = Like &bull; Swipe left = Pass
+          </span>
+        </div>
+        <div className="w-full h-1.5 bg-[var(--border)] rounded-full overflow-hidden">
+          <div
+            className="h-full bg-[#3b82f6] rounded-full transition-all duration-300"
+            style={{ width: `${progressPct}%` }}
+          />
+        </div>
+      </div>
+
+      {/* CSS for entrance animation */}
+      <style jsx>{`
+        @keyframes cardEnter {
+          from {
+            opacity: 0;
+            transform: scale(0.95) translateY(10px);
+          }
+          to {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+          }
+        }
+      `}</style>
 
       {/* Swipe card */}
-      <div
-        className="relative bg-[var(--card)] border border-[var(--border)] rounded-xl overflow-hidden cursor-grab active:cursor-grabbing select-none"
-        style={{
-          transform: `translateX(${dragX}px) rotate(${dragX * 0.05}deg)`,
-          transition: isDragging ? "none" : "transform 0.3s ease",
-        }}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerLeave={onPointerUp}
-      >
-        {/* Swipe indicators */}
-        {dragX > 50 && (
-          <div className="absolute top-6 left-6 z-10 bg-green-500/90 text-white px-4 py-2 rounded-lg text-lg font-bold rotate-[-12deg]">
-            LIKE
-          </div>
-        )}
-        {dragX < -50 && (
-          <div className="absolute top-6 right-6 z-10 bg-red-500/90 text-white px-4 py-2 rounded-lg text-lg font-bold rotate-[12deg]">
-            PASS
-          </div>
-        )}
-
-        {/* Property image */}
-        {current.imageUrl ? (
-          <div className="h-56 bg-[var(--border)] overflow-hidden">
-            <img
-              src={current.imageUrl}
-              alt={current.address}
-              className="w-full h-full object-cover"
-              draggable={false}
-            />
-          </div>
-        ) : (
-          <div className="h-56 bg-[var(--border)] flex items-center justify-center text-[var(--muted)] text-4xl">
-            🏠
-          </div>
-        )}
-
-        {/* Property details */}
-        <div className="p-5 space-y-3">
-          <div className="flex items-start justify-between">
-            <div>
-              <h3 className="text-lg font-bold">{current.address}</h3>
-              <p className="text-sm text-[var(--muted)]">
-                {current.suburb}, {current.state} {current.postcode}
-              </p>
-            </div>
-            <div className="text-right">
-              <p className="text-lg font-bold text-[#3b82f6]">
-                {isLandBuild
-                  ? formatCurrency((current.landPrice || 0) + (current.buildCost || 0))
-                  : formatCurrency(current.price)}
-              </p>
-              {isLandBuild && (
-                <p className="text-xs text-[var(--muted)]">
-                  Land {formatCurrency(current.landPrice || 0)} + Build {formatCurrency(current.buildCost || 0)}
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* Specs row */}
-          <div className="flex gap-4 text-sm">
-            {current.bedrooms != null && <span>{current.bedrooms} bed</span>}
-            {current.bathrooms != null && <span>{current.bathrooms} bath</span>}
-            {current.carSpaces != null && <span>{current.carSpaces} car</span>}
-            {current.landSize != null && <span>{current.landSize} m&sup2;</span>}
-            {current.yearBuilt != null && <span>Built {current.yearBuilt}</span>}
-            <span className="text-[var(--muted)]">{current.propertyType}</span>
-          </div>
-
-          {/* Yield */}
-          <div className="flex items-center gap-4 text-sm">
-            <span>
-              Est. rent: <strong>${current.estimatedWeeklyRent}/wk</strong>
-            </span>
-            <span
-              className={`font-bold ${grossYield >= 7 ? "text-[#22c55e]" : grossYield >= 5 ? "text-yellow-400" : "text-[#ef4444]"}`}
-            >
-              {grossYield.toFixed(1)}% yield
-            </span>
-          </div>
-
-          {/* Affordability toggle */}
-          <button
-            onClick={(e) => { e.stopPropagation(); setShowAffordability(!showAffordability); }}
-            className="text-xs text-[#3b82f6] hover:underline"
+      <div className="relative overflow-hidden rounded-xl" style={{ minHeight: "420px" }}>
+        <div
+          ref={cardRef}
+          className="bg-[var(--card)] border border-[var(--border)] rounded-xl overflow-hidden cursor-grab active:cursor-grabbing select-none"
+          style={getCardStyle()}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerLeave={onPointerUp}
+        >
+          {/* Swipe indicators */}
+          <div
+            className="absolute top-6 left-6 z-10 bg-green-500/90 text-white px-5 py-2 rounded-lg text-xl font-bold rotate-[-12deg] transition-opacity duration-150"
+            style={{ opacity: dragX > 50 ? Math.min((dragX - 50) / 100, 1) : 0 }}
           >
-            {showAffordability ? "Hide" : "Show"} affordability check
-          </button>
+            LIKE ♥
+          </div>
+          <div
+            className="absolute top-6 right-6 z-10 bg-red-500/90 text-white px-5 py-2 rounded-lg text-xl font-bold rotate-[12deg] transition-opacity duration-150"
+            style={{ opacity: dragX < -50 ? Math.min((-dragX - 50) / 100, 1) : 0 }}
+          >
+            PASS ✕
+          </div>
 
-          {showAffordability && (
-            <div className="bg-[#0a0a0a] rounded-lg p-3 text-xs space-y-1 border border-[var(--border)]">
-              <Row label="20% Deposit" value={formatCurrency(deposit20)} />
-              <Row label="Stamp Duty (land only)" value={formatCurrency(stampDuty)} />
-              {buildBonus > 0 && <Row label="NT BuildBonus" value={`-${formatCurrency(buildBonus)}`} positive />}
-              <Row label="Net Cash Needed" value={formatCurrency(netDeposit)} />
-              <div className="border-t border-[var(--border)] my-1" />
-              <Row label="Loan Amount" value={formatCurrency(loanAmount)} />
-              <Row label="Monthly Repayment (6.5%, 30yr)" value={formatCurrency(monthlyRepayment)} />
-              <Row
-                label="Weekly Cash Flow"
-                value={`${weeklyCashFlow >= 0 ? "+" : ""}${formatCurrency(weeklyCashFlow)}/wk`}
-                positive={weeklyCashFlow >= 0}
-                negative={weeklyCashFlow < 0}
+          {/* Property image */}
+          {current.imageUrl ? (
+            <div className="h-56 bg-[var(--border)] overflow-hidden">
+              <img
+                src={current.imageUrl}
+                alt={current.address}
+                className="w-full h-full object-cover"
+                draggable={false}
               />
             </div>
+          ) : (
+            <div className="h-56 bg-[var(--border)] flex items-center justify-center text-[var(--muted)] text-4xl">
+              🏠
+            </div>
           )}
 
-          {/* Listing link */}
-          {current.listingUrl && (
-            <a
-              href={current.listingUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-[#3b82f6] hover:underline block"
-              onClick={(e) => e.stopPropagation()}
-            >
-              View original listing &rarr;
-            </a>
-          )}
+          {/* Property details */}
+          <div className="p-5 space-y-3">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-lg font-bold">{current.address}</h3>
+                <p className="text-sm text-[var(--muted)]">
+                  {current.suburb}, {current.state} {current.postcode}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-lg font-bold text-[#3b82f6]">
+                  {isLandBuild
+                    ? formatCurrency((current.landPrice || 0) + (current.buildCost || 0))
+                    : current.price > 0
+                      ? formatCurrency(current.price)
+                      : (current as DiscoverProperty & { displayPrice?: string }).displayPrice || "Contact Agent"}
+                </p>
+                {isLandBuild && (
+                  <p className="text-xs text-[var(--muted)]">
+                    Land {formatCurrency(current.landPrice || 0)} + Build {formatCurrency(current.buildCost || 0)}
+                  </p>
+                )}
+              </div>
+            </div>
 
-          {current.notes && (
-            <p className="text-xs text-[var(--muted)] italic">{current.notes}</p>
-          )}
+            {/* Specs row */}
+            <div className="flex gap-4 text-sm">
+              {current.bedrooms != null && <span>{current.bedrooms} bed</span>}
+              {current.bathrooms != null && <span>{current.bathrooms} bath</span>}
+              {current.carSpaces != null && <span>{current.carSpaces} car</span>}
+              {current.landSize != null && <span>{current.landSize} m&sup2;</span>}
+              {current.yearBuilt != null && <span>Built {current.yearBuilt}</span>}
+              <span className="text-[var(--muted)]">{current.propertyType}</span>
+            </div>
+
+            {/* Yield */}
+            {current.estimatedWeeklyRent > 0 && (
+              <div className="flex items-center gap-4 text-sm">
+                <span>
+                  Est. rent: <strong>${current.estimatedWeeklyRent}/wk</strong>
+                </span>
+                <span
+                  className={`font-bold ${grossYield >= 7 ? "text-[#22c55e]" : grossYield >= 5 ? "text-yellow-400" : "text-[#ef4444]"}`}
+                >
+                  {grossYield.toFixed(1)}% yield
+                </span>
+              </div>
+            )}
+
+            {/* Affordability toggle */}
+            {totalPrice > 0 && (
+              <>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setShowAffordability(!showAffordability); }}
+                  className="text-xs text-[#3b82f6] hover:underline"
+                >
+                  {showAffordability ? "Hide" : "Show"} affordability check
+                </button>
+
+                {showAffordability && (
+                  <div className="bg-[#0a0a0a] rounded-lg p-3 text-xs space-y-1 border border-[var(--border)]">
+                    <Row label="20% Deposit" value={formatCurrency(deposit20)} />
+                    <Row label="Stamp Duty (land only)" value={formatCurrency(stampDuty)} />
+                    {buildBonus > 0 && <Row label="NT BuildBonus" value={`-${formatCurrency(buildBonus)}`} positive />}
+                    <Row label="Net Cash Needed" value={formatCurrency(netDeposit)} />
+                    <div className="border-t border-[var(--border)] my-1" />
+                    <Row label="Loan Amount" value={formatCurrency(loanAmount)} />
+                    <Row label="Monthly Repayment (6.5%, 30yr)" value={formatCurrency(monthlyRepayment)} />
+                    <Row
+                      label="Weekly Cash Flow"
+                      value={`${weeklyCashFlow >= 0 ? "+" : ""}${formatCurrency(weeklyCashFlow)}/wk`}
+                      positive={weeklyCashFlow >= 0}
+                      negative={weeklyCashFlow < 0}
+                    />
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Listing link */}
+            {current.listingUrl && (
+              <a
+                href={current.listingUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-[#3b82f6] hover:underline block"
+                onClick={(e) => e.stopPropagation()}
+              >
+                View original listing &rarr;
+              </a>
+            )}
+
+            {current.notes && (
+              <p className="text-xs text-[var(--muted)] italic">{current.notes}</p>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Action buttons */}
-      <div className="flex justify-center gap-8">
+      <div className="flex justify-center items-center gap-6">
         <button
           onClick={() => handleSwipe("left")}
-          className="w-16 h-16 rounded-full bg-[var(--card)] border-2 border-[#ef4444] text-[#ef4444] text-2xl font-bold hover:bg-[#ef4444] hover:text-white transition-colors flex items-center justify-center"
+          disabled={!!exitDirection}
+          className="w-16 h-16 rounded-full bg-[var(--card)] border-2 border-[#ef4444] text-[#ef4444] text-2xl font-bold hover:bg-[#ef4444] hover:text-white transition-all duration-200 flex items-center justify-center active:scale-90 disabled:opacity-50"
           title="Pass"
         >
           ✕
         </button>
+        <div className="text-center">
+          <div className="text-2xl font-bold text-white">{currentIndex + 1}</div>
+          <div className="text-xs text-[var(--muted)]">of {total}</div>
+        </div>
         <button
           onClick={() => handleSwipe("right")}
-          className="w-16 h-16 rounded-full bg-[var(--card)] border-2 border-[#22c55e] text-[#22c55e] text-2xl hover:bg-[#22c55e] hover:text-white transition-colors flex items-center justify-center"
-          title="Like"
+          disabled={!!exitDirection}
+          className="w-16 h-16 rounded-full bg-[var(--card)] border-2 border-[#22c55e] text-[#22c55e] text-2xl hover:bg-[#22c55e] hover:text-white transition-all duration-200 flex items-center justify-center active:scale-90 disabled:opacity-50"
+          title="Like — saves to watchlist"
         >
           ♥
         </button>
       </div>
-    </div>
-  );
-}
 
-/* ─── ADD PROPERTY TAB ─────────────────────────────────────────── */
-
-function AddPropertyTab({ onAdd }: { onAdd: (p: DiscoverProperty) => void }) {
-  const [form, setForm] = useState({
-    address: "",
-    suburb: "",
-    state: "NT",
-    postcode: "",
-    price: 0,
-    propertyType: "House" as DiscoverProperty["propertyType"],
-    bedrooms: 4,
-    bathrooms: 4,
-    carSpaces: 2,
-    landSize: 0,
-    buildingSize: 0,
-    yearBuilt: 0,
-    estimatedWeeklyRent: 1050,
-    imageUrl: "",
-    listingUrl: "",
-    notes: "",
-    landPrice: 0,
-    buildCost: 0,
-  });
-  const [saved, setSaved] = useState(false);
-
-  const isLandBuild = form.propertyType === "Land+Build";
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const property: DiscoverProperty = {
-      id: `manual-${Date.now()}`,
-      ...form,
-      bedrooms: form.bedrooms || null,
-      bathrooms: form.bathrooms || null,
-      carSpaces: form.carSpaces || null,
-      landSize: form.landSize || null,
-      buildingSize: form.buildingSize || null,
-      yearBuilt: form.yearBuilt || null,
-      landPrice: isLandBuild ? form.landPrice : null,
-      buildCost: isLandBuild ? form.buildCost : null,
-      price: isLandBuild ? form.landPrice + form.buildCost : form.price,
-      source: "manual",
-      createdAt: new Date().toISOString(),
-    };
-    onAdd(property);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-    setForm({
-      address: "", suburb: "", state: "NT", postcode: "", price: 0,
-      propertyType: "House", bedrooms: 4, bathrooms: 4, carSpaces: 2,
-      landSize: 0, buildingSize: 0, yearBuilt: 0, estimatedWeeklyRent: 1050,
-      imageUrl: "", listingUrl: "", notes: "", landPrice: 0, buildCost: 0,
-    });
-  };
-
-  const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
-    <div>
-      <label className="block text-xs text-[var(--muted)] mb-1">{label}</label>
-      {children}
-    </div>
-  );
-
-  const inputClass = "w-full bg-[#0a0a0a] border border-[var(--border)] rounded px-3 py-2 text-sm text-white";
-
-  return (
-    <form onSubmit={handleSubmit} className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-4">
-      <h3 className="font-bold text-lg">Add a Property</h3>
-      <p className="text-xs text-[var(--muted)]">
-        Found something on realestate.com.au or Domain? Add it here. Defaults are set for your 4-bed ensuite new build model.
+      {/* Keyboard hint */}
+      <p className="text-center text-xs text-[var(--muted)]">
+        Tip: Drag the card or tap the buttons
       </p>
-
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Address">
-          <input className={inputClass} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} required />
-        </Field>
-        <Field label="Suburb">
-          <input className={inputClass} value={form.suburb} onChange={(e) => setForm({ ...form, suburb: e.target.value })} required />
-        </Field>
-        <Field label="State">
-          <select className={inputClass} value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })}>
-            {["NT", "QLD", "WA", "SA", "NSW", "VIC", "TAS", "ACT"].map((s) => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Postcode">
-          <input className={inputClass} value={form.postcode} onChange={(e) => setForm({ ...form, postcode: e.target.value })} />
-        </Field>
-      </div>
-
-      <Field label="Property Type">
-        <select
-          className={inputClass}
-          value={form.propertyType}
-          onChange={(e) => setForm({ ...form, propertyType: e.target.value as DiscoverProperty["propertyType"] })}
-        >
-          <option value="House">House</option>
-          <option value="Unit">Unit / Apartment</option>
-          <option value="Land">Vacant Land</option>
-          <option value="Land+Build">Land + Build Package</option>
-          <option value="Townhouse">Townhouse</option>
-        </select>
-      </Field>
-
-      {isLandBuild ? (
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Land Price ($)">
-            <input type="number" className={inputClass} value={form.landPrice || ""} onChange={(e) => setForm({ ...form, landPrice: +e.target.value })} />
-          </Field>
-          <Field label="Build Cost ($)">
-            <input type="number" className={inputClass} value={form.buildCost || ""} onChange={(e) => setForm({ ...form, buildCost: +e.target.value })} />
-          </Field>
-        </div>
-      ) : (
-        <Field label="Price ($)">
-          <input type="number" className={inputClass} value={form.price || ""} onChange={(e) => setForm({ ...form, price: +e.target.value })} required />
-        </Field>
-      )}
-
-      <div className="grid grid-cols-4 gap-3">
-        <Field label="Beds">
-          <input type="number" className={inputClass} value={form.bedrooms || ""} onChange={(e) => setForm({ ...form, bedrooms: +e.target.value })} />
-        </Field>
-        <Field label="Baths">
-          <input type="number" className={inputClass} value={form.bathrooms || ""} onChange={(e) => setForm({ ...form, bathrooms: +e.target.value })} />
-        </Field>
-        <Field label="Cars">
-          <input type="number" className={inputClass} value={form.carSpaces || ""} onChange={(e) => setForm({ ...form, carSpaces: +e.target.value })} />
-        </Field>
-        <Field label="Land m&sup2;">
-          <input type="number" className={inputClass} value={form.landSize || ""} onChange={(e) => setForm({ ...form, landSize: +e.target.value })} />
-        </Field>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Est. Weekly Rent ($)">
-          <input type="number" className={inputClass} value={form.estimatedWeeklyRent || ""} onChange={(e) => setForm({ ...form, estimatedWeeklyRent: +e.target.value })} />
-        </Field>
-        <Field label="Year Built">
-          <input type="number" className={inputClass} placeholder="e.g. 2026" value={form.yearBuilt || ""} onChange={(e) => setForm({ ...form, yearBuilt: +e.target.value })} />
-        </Field>
-      </div>
-
-      <Field label="Image URL (paste from listing)">
-        <input className={inputClass} placeholder="https://..." value={form.imageUrl} onChange={(e) => setForm({ ...form, imageUrl: e.target.value })} />
-      </Field>
-      <Field label="Listing URL">
-        <input className={inputClass} placeholder="https://www.realestate.com.au/..." value={form.listingUrl} onChange={(e) => setForm({ ...form, listingUrl: e.target.value })} />
-      </Field>
-      <Field label="Notes / Suburb Research">
-        <textarea
-          className={inputClass + " h-20"}
-          placeholder="e.g. High yield mining town, close to amenities..."
-          value={form.notes}
-          onChange={(e) => setForm({ ...form, notes: e.target.value })}
-        />
-      </Field>
-
-      <button
-        type="submit"
-        className="w-full bg-[#3b82f6] text-white py-2 rounded-lg font-medium hover:bg-blue-600 transition-colors"
-      >
-        {saved ? "Added!" : "Add to Discover Stack"}
-      </button>
-    </form>
+    </div>
   );
 }
 
@@ -666,7 +607,7 @@ function SearchTab({ onResultsLoaded }: { onResultsLoaded: (results: DiscoverPro
         )}
       </div>
 
-      {/* Results */}
+      {/* Results preview */}
       {results.length > 0 && (
         <div className="space-y-3">
           <button
@@ -676,7 +617,7 @@ function SearchTab({ onResultsLoaded }: { onResultsLoaded: (results: DiscoverPro
             Start Swiping {results.length} Properties &rarr;
           </button>
           <h4 className="font-medium text-sm text-[var(--muted)]">{results.length} results preview</h4>
-          {results.map((p) => (
+          {results.slice(0, 5).map((p) => (
             <div key={p.id} className="bg-[var(--card)] border border-[var(--border)] rounded-xl overflow-hidden flex">
               {p.imageUrl ? (
                 <img
@@ -706,6 +647,9 @@ function SearchTab({ onResultsLoaded }: { onResultsLoaded: (results: DiscoverPro
               </div>
             </div>
           ))}
+          {results.length > 5 && (
+            <p className="text-xs text-center text-[var(--muted)]">+ {results.length - 5} more — start swiping to see all</p>
+          )}
         </div>
       )}
     </div>
@@ -755,19 +699,23 @@ function WatchlistTab({
                 <p className="font-medium text-sm truncate">{p.address}</p>
                 <p className="text-xs text-[var(--muted)]">{p.suburb}, {p.state} {p.postcode}</p>
               </div>
-              <span className={`text-xs font-bold ${grossYield >= 7 ? "text-[#22c55e]" : grossYield >= 5 ? "text-yellow-400" : "text-[#ef4444]"}`}>
-                {grossYield.toFixed(1)}%
-              </span>
+              {grossYield > 0 && (
+                <span className={`text-xs font-bold ${grossYield >= 7 ? "text-[#22c55e]" : grossYield >= 5 ? "text-yellow-400" : "text-[#ef4444]"}`}>
+                  {grossYield.toFixed(1)}%
+                </span>
+              )}
             </div>
             <p className="text-sm font-bold text-[#3b82f6] mt-1">{formatCurrency(totalPrice)}</p>
             <div className="grid grid-cols-3 gap-1 text-xs mt-2 text-[var(--muted)]">
-              <span>Rent: ${p.estimatedWeeklyRent}/wk</span>
+              {p.estimatedWeeklyRent > 0 && <span>Rent: ${p.estimatedWeeklyRent}/wk</span>}
               <span>Stamp: {formatCurrency(stampDuty)}</span>
               {buildBonus > 0 && <span className="text-[#22c55e]">Bonus: -{formatCurrency(buildBonus)}</span>}
             </div>
-            <p className={`text-xs font-medium mt-1 ${weeklyCashFlow >= 0 ? "text-[#22c55e]" : "text-[#ef4444]"}`}>
-              Cash flow: {weeklyCashFlow >= 0 ? "+" : ""}{formatCurrency(weeklyCashFlow)}/wk
-            </p>
+            {p.estimatedWeeklyRent > 0 && (
+              <p className={`text-xs font-medium mt-1 ${weeklyCashFlow >= 0 ? "text-[#22c55e]" : "text-[#ef4444]"}`}>
+                Cash flow: {weeklyCashFlow >= 0 ? "+" : ""}{formatCurrency(weeklyCashFlow)}/wk
+              </p>
+            )}
           </div>
         </div>
         <div className="border-t border-[var(--border)] px-3 py-2 flex items-center justify-between">
@@ -810,17 +758,19 @@ function WatchlistTab({
       </div>
 
       {/* Passed */}
-      <div>
-        <button
-          onClick={() => setShowPassed(!showPassed)}
-          className="text-sm text-[var(--muted)] hover:text-white"
-        >
-          {showPassed ? "Hide" : "Show"} passed properties ({passed.length})
-        </button>
-        {showPassed && passed.length > 0 && (
-          <div className="space-y-3 mt-3">{passed.map(renderCard)}</div>
-        )}
-      </div>
+      {passed.length > 0 && (
+        <div>
+          <button
+            onClick={() => setShowPassed(!showPassed)}
+            className="text-sm text-[var(--muted)] hover:text-white"
+          >
+            {showPassed ? "Hide" : "Show"} passed properties ({passed.length})
+          </button>
+          {showPassed && (
+            <div className="space-y-3 mt-3">{passed.map(renderCard)}</div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -837,7 +787,6 @@ function Row({ label, value, positive, negative }: { label: string; value: strin
 }
 
 function calcStampDutyNT(value: number): number {
-  // NT stamp duty brackets (on land value for new builds)
   if (value <= 525000) return value * 0.06571 * (1.05 - value * 0.00000095238);
   return value * 0.0495;
 }

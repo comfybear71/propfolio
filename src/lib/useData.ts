@@ -138,52 +138,6 @@ export function useAssets() {
   return { assets: data, setAssets: setData, saveAll, loaded };
 }
 
-export function useDiscover() {
-  const [data, setData] = useState<DiscoverProperty[]>([]);
-  const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => {
-    fetch("/api/discover")
-      .then((r) => r.json())
-      .then((d) => { if (Array.isArray(d)) setData(d); setLoaded(true); })
-      .catch(() => setLoaded(true));
-  }, []);
-
-  const add = useCallback(async (property: DiscoverProperty) => {
-    setData((prev) => [property, ...prev]);
-    await fetch("/api/discover", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(property),
-    }).catch(() => {});
-  }, []);
-
-  const addBulk = useCallback(async (properties: DiscoverProperty[]) => {
-    setData((prev) => [...properties, ...prev]);
-    await fetch("/api/discover", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(properties),
-    }).catch(() => {});
-  }, []);
-
-  const update = useCallback(async (property: DiscoverProperty) => {
-    setData((prev) => prev.map((p) => (p.id === property.id ? property : p)));
-    await fetch("/api/discover", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(property),
-    }).catch(() => {});
-  }, []);
-
-  const remove = useCallback(async (id: string) => {
-    setData((prev) => prev.filter((p) => p.id !== id));
-    await fetch(`/api/discover?id=${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => {});
-  }, []);
-
-  return { discoverProperties: data, setDiscoverProperties: setData, addProperty: add, addBulk, updateProperty: update, removeProperty: remove, loaded };
-}
-
 export function useWatchlist() {
   const [data, setData] = useState<WatchlistItem[]>([]);
   const [loaded, setLoaded] = useState(false);
