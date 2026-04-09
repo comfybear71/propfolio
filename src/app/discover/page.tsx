@@ -472,6 +472,7 @@ function AddPropertyTab({ onAdd }: { onAdd: (p: DiscoverProperty) => void }) {
 /* ─── SEARCH API TAB ───────────────────────────────────────────── */
 
 function SearchTab({ onImport }: { onImport: (p: DiscoverProperty) => void }) {
+  const [apiSource, setApiSource] = useState<"rapidapi" | "domain">("rapidapi");
   const [filters, setFilters] = useState({
     state: "NT",
     suburb: "",
@@ -493,7 +494,8 @@ function SearchTab({ onImport }: { onImport: (p: DiscoverProperty) => void }) {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/domain-search", {
+      const endpoint = apiSource === "rapidapi" ? "/api/rapidapi-search" : "/api/domain-search";
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(filters),
@@ -504,6 +506,7 @@ function SearchTab({ onImport }: { onImport: (p: DiscoverProperty) => void }) {
         return;
       }
       setResults(data.results || []);
+      if (data.results?.length === 0) setError("No results found. Try a different suburb or broader filters.");
     } catch {
       setError("Failed to connect to search API");
     } finally {
@@ -521,10 +524,31 @@ function SearchTab({ onImport }: { onImport: (p: DiscoverProperty) => void }) {
   return (
     <div className="space-y-4">
       <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-4">
-        <h3 className="font-bold text-lg">Search Domain API</h3>
+        <div className="flex items-center justify-between">
+          <h3 className="font-bold text-lg">Search Properties</h3>
+          <div className="flex gap-1 bg-[#0a0a0a] rounded-lg p-0.5 border border-[var(--border)]">
+            <button
+              onClick={() => setApiSource("rapidapi")}
+              className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                apiSource === "rapidapi" ? "bg-[#3b82f6] text-white" : "text-[var(--muted)] hover:text-white"
+              }`}
+            >
+              realestate.com.au
+            </button>
+            <button
+              onClick={() => setApiSource("domain")}
+              className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                apiSource === "domain" ? "bg-[#3b82f6] text-white" : "text-[var(--muted)] hover:text-white"
+              }`}
+            >
+              Domain
+            </button>
+          </div>
+        </div>
         <p className="text-xs text-[var(--muted)]">
-          Search listings from domain.com.au. Requires DOMAIN_API_KEY in your environment variables.
-          {" "}Sign up at developer.domain.com.au for free.
+          {apiSource === "rapidapi"
+            ? "Search listings from realestate.com.au via RapidAPI. Enter a suburb name for best results."
+            : "Search listings from domain.com.au. Requires Agents & Listings API access."}
         </p>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
