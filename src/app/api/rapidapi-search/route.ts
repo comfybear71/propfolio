@@ -70,40 +70,12 @@ export async function POST(req: NextRequest) {
     const data = await response.json();
 
     // Normalise results — handle both tieredResults and flat results
-    interface RapidAPIMedia {
-      templatedUrl?: string;
-      url?: string;
-    }
-    interface RapidAPIProperty {
-      id?: string | number;
-      propertyType?: string;
-      address?: {
-        display?: { shortAddress?: string; fullAddress?: string };
-        suburb?: string;
-        state?: string;
-        postcode?: string;
-      };
-      generalFeatures?: {
-        bedrooms?: { value?: number };
-        bathrooms?: { value?: number };
-        parkingSpaces?: { value?: number };
-      };
-      propertyFeatures?: {
-        landSize?: number;
-        buildingSize?: number;
-      };
-      price?: {
-        display?: string;
-        value?: number;
-      };
-      media?: RapidAPIMedia[];
-      images?: RapidAPIMedia[];
-      listingSlug?: string;
-      _links?: { canonical?: { href?: string } };
-    }
+    /* eslint-disable @typescript-eslint/no-explicit-any */
+    type AnyObj = Record<string, any>;
+    /* eslint-enable @typescript-eslint/no-explicit-any */
 
     // Extract listings from tiered results or flat array
-    let listings: RapidAPIProperty[] = [];
+    let listings: AnyObj[] = [];
     if (data.tieredResults) {
       for (const tier of data.tieredResults) {
         if (tier.results) listings.push(...tier.results);
@@ -114,17 +86,71 @@ export async function POST(req: NextRequest) {
       listings = data;
     }
 
-    const normalised = listings.map((item: RapidAPIProperty) => {
+    // Log first result structure for debugging image fields
+    if (listings.length > 0) {
+      const sample = listings[0];
+      const imageKeys = Object.keys(sample).filter(k =>
+        /image|photo|media|hero|picture|thumb/i.test(k)
+      );
+      console.log("[RapidAPI] Image-related keys:", imageKeys);
+      for (const key of imageKeys) {
+        console.log(`[RapidAPI] ${key}:`, JSON.stringify(sample[key])?.substring(0, 500));
+      }
+    }
+
+    const normalised = listings.map((item: AnyObj) => {
       const addr = item.address || {};
       const features = item.generalFeatures || {};
       const propFeatures = item.propertyFeatures || {};
-      const mediaList = item.media || item.images || [];
-      const firstImage = mediaList[0];
+
+      // Try multiple image field patterns
       let imageUrl = "";
-      if (firstImage) {
-        imageUrl = firstImage.templatedUrl
-          ? firstImage.templatedUrl.replace("{size}", "800x600")
-          : firstImage.url || "";
+      // 1. mainImage or heroImageUrl (common realestate.com.au fields)
+      if (item.mainImage?.server && item.mainImage?.uri) {
+        imageUrl = `${item.mainImage.server}/800x600${item.mainImage.uri}`;
+      } else if (item.heroImageUrl) {
+        imageUrl = item.heroImageUrl;
+      }
+      // 2. images array
+      if (!imageUrl && item.images?.length > 0) {
+        const img = item.images[0];
+        if (img.server && img.uri) {
+          imageUrl = `${img.server}/800x600${img.uri}`;
+        } else if (img.templatedUrl) {
+          imageUrl = img.templatedUrl.replace("{size}", "800x600");
+        } else if (img.url) {
+          imageUrl = img.url;
+        }
+      }
+      // 3. media array
+      if (!imageUrl && item.media?.length > 0) {
+        const m = item.media[0];
+        if (m.server && m.uri) {
+          imageUrl = `${m.server}/800x600${m.uri}`;
+        } else if (m.templatedUrl) {
+          imageUrl = m.templatedUrl.replace("{size}", "800x600");
+        } else if (m.url) {
+          imageUrl = m.url;
+        } else if (typeof m === "string") {
+          imageUrl = m;
+        }
+      }
+      // 4. image field (singular)
+      if (!imageUrl && item.image) {
+        if (typeof item.image === "string") {
+          imageUrl = item.image;
+        } else if (item.image.server && item.image.uri) {
+          imageUrl = `${item.image.server}/800x600${item.image.uri}`;
+        } else if (item.image.url) {
+          imageUrl = item.image.url;
+        }
+      }
+      // 5. photos array
+      if (!imageUrl && item.photos?.length > 0) {
+        const p = item.photos[0];
+        if (typeof p === "string") imageUrl = p;
+        else if (p.fullUrl) imageUrl = p.fullUrl;
+        else if (p.url) imageUrl = p.url;
       }
 
       // Try to extract numeric price
@@ -164,10 +190,22 @@ export async function POST(req: NextRequest) {
       };
     });
 
+    // Include raw first result for debugging image fields
+    const debug = listings.length > 0 ? {
+      sampleKeys: Object.keys(listings[0]),
+      imageRelatedFields: Object.keys(listings[0]).filter(k => /image|photo|media|hero|picture|thumb/i.test(k)),
+      rawImageData: Object.fromEntries(
+        Object.keys(listings[0])
+          .filter(k => /image|photo|media|hero|picture|thumb/i.test(k))
+          .map(k => [k, listings[0][k]])
+      ),
+    } : null;
+
     return NextResponse.json({
       ok: true,
       results: normalised,
       total: data.totalResultsCount || normalised.length,
+      debug,
     });
   } catch (err) {
     return NextResponse.json(

@@ -628,18 +628,43 @@ function SearchTab({ onImport }: { onImport: (p: DiscoverProperty) => void }) {
       {/* Results */}
       {results.length > 0 && (
         <div className="space-y-3">
-          <h4 className="font-medium text-sm text-[var(--muted)]">{results.length} results</h4>
+          <div className="flex items-center justify-between">
+            <h4 className="font-medium text-sm text-[var(--muted)]">{results.length} results</h4>
+            <button
+              onClick={() => {
+                const unimported = results.filter((p) => !imported.has(p.id));
+                unimported.forEach((p) => handleImport(p));
+              }}
+              disabled={results.every((p) => imported.has(p.id))}
+              className="text-xs bg-[#22c55e] text-white px-4 py-1.5 rounded-lg hover:bg-green-600 disabled:opacity-50 font-medium"
+            >
+              {results.every((p) => imported.has(p.id))
+                ? `All ${results.length} Imported`
+                : `Import All ${results.filter((p) => !imported.has(p.id)).length}`}
+            </button>
+          </div>
           {results.map((p) => (
             <div key={p.id} className="bg-[var(--card)] border border-[var(--border)] rounded-xl overflow-hidden flex">
               {p.imageUrl ? (
-                <img src={p.imageUrl} alt={p.address} className="w-32 h-32 object-cover flex-shrink-0" />
-              ) : (
-                <div className="w-32 h-32 bg-[var(--border)] flex items-center justify-center text-2xl flex-shrink-0">🏠</div>
-              )}
+                <img
+                  src={p.imageUrl}
+                  alt={p.address}
+                  className="w-32 h-32 object-cover flex-shrink-0"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = "none";
+                    (e.target as HTMLImageElement).nextElementSibling?.classList.remove("hidden");
+                  }}
+                />
+              ) : null}
+              <div className={`w-32 h-32 bg-[var(--border)] flex items-center justify-center text-3xl flex-shrink-0 ${p.imageUrl ? "hidden" : ""}`}>
+                🏠
+              </div>
               <div className="p-3 flex-1 min-w-0">
                 <p className="font-medium text-sm truncate">{p.address}</p>
                 <p className="text-xs text-[var(--muted)]">{p.suburb}, {p.state} {p.postcode}</p>
-                <p className="text-sm font-bold text-[#3b82f6] mt-1">{formatCurrency(p.price)}</p>
+                <p className="text-sm font-bold text-[#3b82f6] mt-1">
+                  {p.price > 0 ? formatCurrency(p.price) : (p as DiscoverProperty & { displayPrice?: string }).displayPrice || "Contact Agent"}
+                </p>
                 <div className="flex gap-3 text-xs text-[var(--muted)] mt-1">
                   {p.bedrooms != null && <span>{p.bedrooms} bed</span>}
                   {p.bathrooms != null && <span>{p.bathrooms} bath</span>}
