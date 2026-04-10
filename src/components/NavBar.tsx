@@ -3,12 +3,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import { useSession, signOut } from "next-auth/react";
 
 const links = [
   { href: "/", label: "Dashboard" },
   { href: "/properties", label: "Properties" },
   { href: "/finances", label: "Finances" },
   { href: "/assets", label: "Assets" },
+  { href: "/discover", label: "Discover" },
   { href: "/borrowing", label: "Borrowing" },
   { href: "/strategy", label: "Strategy" },
   { href: "/roadmap", label: "Roadmap" },
@@ -19,9 +21,13 @@ const links = [
 export default function NavBar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const { data: session } = useSession();
+
+  // Don't show nav on login page
+  if (pathname === "/login") return null;
 
   return (
-    <nav className="border-b border-[var(--card-border)] px-6 py-4">
+    <nav className="border-b border-[var(--card-border)] px-3 sm:px-6 py-3">
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center justify-between">
           <Link href="/" className="text-xl font-bold tracking-tight">
@@ -39,6 +45,14 @@ export default function NavBar() {
                 {link.label}
               </Link>
             ))}
+            {session?.user && (
+              <button
+                onClick={() => signOut({ callbackUrl: "/login" })}
+                className="text-sm text-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
+              >
+                Sign out
+              </button>
+            )}
           </div>
           {/* Mobile toggle */}
           <button onClick={() => setOpen(!open)} className="md:hidden text-[var(--muted)] text-sm">
@@ -58,6 +72,17 @@ export default function NavBar() {
                 {link.label}
               </Link>
             ))}
+            {session?.user && (
+              <div className="pt-2 border-t border-[var(--card-border)] mt-1">
+                <p className="text-xs text-[var(--muted)] mb-1">{session.user.email}</p>
+                <button
+                  onClick={() => { setOpen(false); signOut({ callbackUrl: "/login" }); }}
+                  className="text-sm text-[var(--muted)] hover:text-[var(--foreground)]"
+                >
+                  Sign out
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

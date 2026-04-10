@@ -1,17 +1,36 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { formatCurrency } from "@/lib/data";
-import { useProperties, useLoans, useIncomes } from "@/lib/useData";
+import { useProperties, useLoans, useIncomes, useBorrowingSettings } from "@/lib/useData";
 
 export default function Dashboard() {
   const { properties, loaded: pLoaded } = useProperties();
   const { loans, loaded: lLoaded } = useLoans();
   const { incomes, loaded: iLoaded } = useIncomes();
+  const { settings: borrowingSettings, loaded: bLoaded } = useBorrowingSettings({
+    stuartGross: 157073, sasitronGross: 87882,
+    rentalIncome60: 72800, rentalIncome72: 52000,
+    monthlyExpenses: 5000, existingDebt: 58503,
+    landPrice: 250000, buildCost: 350000, depositPercent: 20,
+    newLoanRate: 6.5, newLoanTerm: 30, expectedRent: 600,
+    useEquity: true, claimBuildBonus: true,
+  });
+  const [docStats, setDocStats] = useState({ total: 0, have: 0, loaded: false });
 
-  if (!pLoaded || !lLoaded || !iLoaded) {
+  useEffect(() => {
+    fetch("/api/documents").then(r => r.json()).then(docs => {
+      if (Array.isArray(docs) && docs.length > 0) {
+        setDocStats({ total: docs.length, have: docs.filter((d: { status: string }) => d.status === "have").length, loaded: true });
+      } else {
+        setDocStats({ total: 40, have: 0, loaded: true });
+      }
+    }).catch(() => setDocStats({ total: 40, have: 0, loaded: true }));
+  }, []);
+
+  if (!pLoaded || !lLoaded || !iLoaded || !bLoaded) {
     return <div className="text-center text-[var(--muted)] py-20">Loading...</div>;
   }
 
@@ -67,11 +86,109 @@ export default function Dashboard() {
   const totalDebtAfterPurchase = totalMortgage + equityRelease + newLoanAt20;
   const dtiAfterPurchase = totalDebtAfterPurchase / totalAnnualGrossIncome;
 
+  // --- Next Property Progress ---
+  const bs = borrowingSettings;
+  const targetPropertyCost = bs.landPrice + bs.buildCost;
+  const targetDeposit = targetPropertyCost * (bs.depositPercent / 100);
+  const targetStampDuty = bs.landPrice * 0.0495;
+  const targetBuildBonus = bs.claimBuildBonus ? 30000 : 0;
+  const targetCashNeeded = targetDeposit + targetStampDuty - targetBuildBonus;
+  const targetLoan = targetPropertyCost - targetDeposit;
+
+  // Borrowing capacity check
+  const rentalShading = 0.80;
+  const assessedIncome = bs.stuartGross + bs.sasitronGross + (bs.rentalIncome60 + bs.rentalIncome72) * rentalShading;
+  const maxBorrowing = Math.max(0, (assessedIncome * 0.35 - bs.existingDebt) / 12) *
+    ((1 - Math.pow(1 + ((Math.max(...loans.map(l => l.interestRate)) + 3) / 100 / 12), -(bs.newLoanTerm * 12))) /
+    ((Math.max(...loans.map(l => l.interestRate)) + 3) / 100 / 12));
+  const dtiCapacity = (bs.stuartGross + bs.sasitronGross) * 6 - totalMortgage;
+  const canBorrow = targetLoan <= maxBorrowing && targetLoan <= dtiCapacity;
+
+  // Progress milestones
+  const depositProgress = Math.min(100, (usableEquity + totalOffsetBalance) / targetCashNeeded * 100);
+  const borrowingProgress = canBorrow ? 100 : Math.min(99, Math.max(0, (maxBorrowing / targetLoan) * 100));
+  const docProgress = docStats.total > 0 ? (docStats.have / docStats.total) * 100 : 0;
+  const offsetProgress = loans[1] ? Math.min(100, (loans[1].offsetBalance / loans[1].balance) * 100) : 0;
+
+  // Overall progress — weighted average
+  const overallProgress = Math.round(
+    depositProgress * 0.35 +
+    borrowingProgress * 0.30 +
+    docProgress * 0.20 +
+    offsetProgress * 0.15
+  );
+
   return (
     <div className="space-y-8">
       <div>
         <h2 className="text-2xl font-bold mb-1">Dashboard</h2>
         <p className="text-[var(--muted)]">Stuart & Sasitron — Portfolio Overview</p>
+      </div>
+
+      {/* Next Property Progress Tracker */}
+      <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card)] p-5">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h3 className="text-lg font-bold">Next Property</h3>
+            <p className="text-xs text-[var(--muted)]">
+              {formatCurrency(targetPropertyCost)} new build — {formatCurrency(bs.landPrice)} land + {formatCurrency(bs.buildCost)} build
+            </p>
+          </div>
+          <div className="text-right">
+            <div className={`text-3xl font-bold ${overallProgress >= 80 ? "text-[var(--positive)]" : overallProgress >= 50 ? "text-yellow-400" : "text-[var(--accent)]"}`}>
+              {overallProgress}%
+            </div>
+            <div className="text-xs text-[var(--muted)]">ready to buy</div>
+          </div>
+        </div>
+
+        {/* Overall progress bar */}
+        <div className="w-full h-3 bg-[var(--card-border)] rounded-full overflow-hidden mb-5">
+          <div
+            className={`h-full rounded-full transition-all duration-500 ${
+              overallProgress >= 80 ? "bg-[var(--positive)]" : overallProgress >= 50 ? "bg-yellow-400" : "bg-[var(--accent)]"
+            }`}
+            style={{ width: `${overallProgress}%` }}
+          />
+        </div>
+
+        {/* Milestone breakdown */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <ProgressMilestone
+            label="Deposit"
+            progress={depositProgress}
+            detail={`${formatCurrency(usableEquity + totalOffsetBalance)} of ${formatCurrency(targetCashNeeded)}`}
+            complete={depositProgress >= 100}
+          />
+          <ProgressMilestone
+            label="Borrowing"
+            progress={borrowingProgress}
+            detail={canBorrow ? "Within capacity" : `Need ${formatCurrency(targetLoan)}`}
+            complete={canBorrow}
+          />
+          <ProgressMilestone
+            label="Documents"
+            progress={docProgress}
+            detail={`${docStats.have}/${docStats.total} ready`}
+            complete={docProgress >= 100}
+            href="/documents"
+          />
+          <ProgressMilestone
+            label="Offset"
+            progress={offsetProgress}
+            detail={`${offsetProgress.toFixed(0)}% of 72 Bagshaw`}
+            complete={offsetProgress >= 100}
+          />
+        </div>
+
+        <div className="mt-4 pt-3 border-t border-[var(--card-border)] flex items-center justify-between">
+          <Link href="/borrowing" className="text-xs text-[var(--accent)] hover:underline">
+            Adjust scenario in Borrowing Planner
+          </Link>
+          <Link href="/strategy" className="text-xs text-[var(--accent)] hover:underline">
+            View full strategy
+          </Link>
+        </div>
       </div>
 
       {/* Top Summary */}
@@ -384,7 +501,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <SeedButton />
 
       <p className="text-center text-[var(--muted)] text-xs pt-4">
         Built with care in Gray, NT
@@ -421,52 +537,30 @@ function Stat({ label, value, sub, positive }: {
   );
 }
 
-function SeedButton() {
-  const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
-  const [result, setResult] = useState<string>("");
-
-  async function handleSeed() {
-    setStatus("loading");
-    try {
-      const res = await fetch("/api/seed", { method: "POST" });
-      const data = await res.json();
-      if (data.ok) {
-        setStatus("done");
-        setResult(JSON.stringify(data.seeded, null, 2));
-      } else {
-        setStatus("error");
-        setResult(data.error || "Unknown error");
-      }
-    } catch (e) {
-      setStatus("error");
-      setResult(String(e));
-    }
-  }
-
-  return (
-    <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="text-sm font-medium">Database Setup</div>
-          <div className="text-xs text-[var(--muted)]">Seed MongoDB with your property, loan, income & expense data</div>
-        </div>
-        <button
-          onClick={handleSeed}
-          disabled={status === "loading"}
-          className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
-            status === "done"
-              ? "bg-[var(--positive)]/20 text-[var(--positive)] border border-[var(--positive)]/30"
-              : status === "error"
-              ? "bg-[var(--negative)]/20 text-[var(--negative)] border border-[var(--negative)]/30"
-              : "bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]"
-          }`}
-        >
-          {status === "loading" ? "Seeding..." : status === "done" ? "Seeded" : status === "error" ? "Failed" : "Seed Database"}
-        </button>
+function ProgressMilestone({ label, progress, detail, complete, href }: {
+  label: string; progress: number; detail: string; complete: boolean; href?: string;
+}) {
+  const content = (
+    <div className={`rounded-lg border p-3 ${complete ? "border-[var(--positive)]/30 bg-[var(--positive)]/5" : "border-[var(--card-border)]"}`}>
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-xs font-medium">{label}</span>
+        <span className={`text-xs font-bold ${complete ? "text-[var(--positive)]" : ""}`}>
+          {complete ? "Ready" : `${Math.round(progress)}%`}
+        </span>
       </div>
-      {result && (
-        <pre className="mt-3 text-xs text-[var(--muted)] bg-[var(--background)] rounded p-2 overflow-x-auto">{result}</pre>
-      )}
+      <div className="w-full h-1.5 bg-[var(--card-border)] rounded-full overflow-hidden mb-1.5">
+        <div
+          className={`h-full rounded-full transition-all ${complete ? "bg-[var(--positive)]" : "bg-[var(--accent)]"}`}
+          style={{ width: `${Math.min(100, progress)}%` }}
+        />
+      </div>
+      <p className="text-[10px] text-[var(--muted)]">{detail}</p>
     </div>
   );
+
+  if (href) {
+    return <Link href={href}>{content}</Link>;
+  }
+  return content;
 }
+

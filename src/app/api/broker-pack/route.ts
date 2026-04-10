@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
-import { getDb } from "@/lib/mongodb";
+import { getAuthDb } from "@/lib/apiAuth";
 
 export async function GET() {
-  const db = await getDb();
-  if (!db) return NextResponse.json({ error: "No database" }, { status: 503 });
+  const ctx = await getAuthDb();
+  if (ctx.error) return ctx.error;
+  const { db, userId } = ctx;
 
-  const files = await db.collection("files").find().sort({ category: 1, person: 1 }).toArray();
+  const files = await db.collection("files").find({ userId }).sort({ category: 1, person: 1 }).toArray();
 
   if (files.length === 0) {
     return NextResponse.json({ error: "No files uploaded yet" }, { status: 404 });

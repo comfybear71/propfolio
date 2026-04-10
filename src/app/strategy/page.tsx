@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { properties, loans, incomes, formatCurrency } from "@/lib/data";
+import { formatCurrency } from "@/lib/data";
+import { useProperties, useLoans, useIncomes, useStrategySettings } from "@/lib/useData";
 
 interface PlannedProperty {
   year: number;
@@ -21,31 +21,43 @@ const defaultPlan: PlannedProperty[] = [
 ];
 
 export default function StrategyPage() {
-  const [plan, setPlan] = useState<PlannedProperty[]>(defaultPlan);
-  const [growthRate, setGrowthRate] = useState(4); // annual capital growth %
-  const [rentGrowth, setRentGrowth] = useState(3); // annual rent growth %
+  const { properties, loaded: pLoaded } = useProperties();
+  const { loans, loaded: lLoaded } = useLoans();
+  const { incomes, loaded: iLoaded } = useIncomes();
+  const { strategy, update: updateStrategy, loaded: sLoaded } = useStrategySettings({
+    plan: defaultPlan,
+    growthRate: 4,
+    rentGrowth: 3,
+  });
+
+  if (!pLoaded || !lLoaded || !iLoaded || !sLoaded) {
+    return <div className="text-center text-[var(--muted)] py-20">Loading...</div>;
+  }
+
+  const { plan, growthRate, rentGrowth } = strategy;
 
   function updatePlan(index: number, field: keyof PlannedProperty, value: number) {
-    setPlan((prev) => prev.map((p, i) => (i === index ? { ...p, [field]: value } : p)));
+    const newPlan = plan.map((p, i) => (i === index ? { ...p, [field]: value } : p));
+    updateStrategy({ plan: newPlan });
   }
 
   function addYear() {
     const last = plan[plan.length - 1];
-    setPlan((prev) => [...prev, {
+    updateStrategy({ plan: [...plan, {
       year: last.year + 1,
       landCost: last.landCost + 10000,
       buildCost: last.buildCost + 20000,
       expectedRent: last.expectedRent + 20,
       interestRate: last.interestRate,
       depositPercent: 20,
-    }]);
+    }] });
   }
 
   function removeYear(index: number) {
-    setPlan((prev) => prev.filter((_, i) => i !== index));
+    updateStrategy({ plan: plan.filter((_, i) => i !== index) });
   }
 
-  // Current portfolio baseline
+  // Current portfolio baseline — from DB
   const currentValue = properties.reduce((s, p) => s + p.currentValue, 0);
   const currentDebt = loans.reduce((s, l) => s + l.balance, 0);
   const currentEquity = currentValue - currentDebt;
@@ -139,8 +151,8 @@ export default function StrategyPage() {
       <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-5">
         <h3 className="font-semibold mb-3">Growth Assumptions</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <InputRow label="Annual Capital Growth" value={growthRate} onChange={setGrowthRate} suffix="%" step={0.5} />
-          <InputRow label="Annual Rent Growth" value={rentGrowth} onChange={setRentGrowth} suffix="%" step={0.5} />
+          <InputRow label="Annual Capital Growth" value={growthRate} onChange={(v) => updateStrategy({ growthRate: v })} suffix="%" step={0.5} />
+          <InputRow label="Annual Rent Growth" value={rentGrowth} onChange={(v) => updateStrategy({ rentGrowth: v })} suffix="%" step={0.5} />
         </div>
       </div>
 

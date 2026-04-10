@@ -5,8 +5,8 @@ export async function GET() {
   const ctx = await getAuthDb();
   if (ctx.error) return ctx.error;
   const { db, userId } = ctx;
-  const assets = await db.collection("assets").find({ userId }).toArray();
-  return NextResponse.json(assets);
+  const settings = await db.collection("borrowing_settings").findOne({ userId });
+  return NextResponse.json(settings || {});
 }
 
 export async function PUT(req: NextRequest) {
@@ -14,9 +14,12 @@ export async function PUT(req: NextRequest) {
   if (ctx.error) return ctx.error;
   const { db, userId } = ctx;
   const body = await req.json();
-  await db.collection("assets").deleteMany({ userId });
-  if (body.length > 0) {
-    await db.collection("assets").insertMany(body.map((a: Record<string, unknown>) => ({ ...a, userId })));
-  }
+  const { _id, ...update } = body;
+  void _id;
+  await db.collection("borrowing_settings").updateOne(
+    { userId },
+    { $set: { ...update, userId, updatedAt: new Date().toISOString() } },
+    { upsert: true }
+  );
   return NextResponse.json({ ok: true });
 }

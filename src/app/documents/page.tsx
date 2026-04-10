@@ -136,6 +136,10 @@ export default function DocumentsPage() {
   const [filterPerson, setFilterPerson] = useState<string>("All");
   const [filterStatus, setFilterStatus] = useState<string>("All");
   const [uploading, setUploading] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [ocrResult, setOcrResult] = useState<{ docId: string; data: Record<string, unknown> } | null>(null);
+  const [ocrLoading, setOcrLoading] = useState<string | null>(null);
+  const [ocrError, setOcrError] = useState<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(null);
 
   const saveDocuments = useCallback(async (docs: Document[]) => {
@@ -177,6 +181,9 @@ export default function DocumentsPage() {
 
   async function uploadFile(documentId: string, category: string, person: string, file: File) {
     setUploading(documentId);
+    setUploadError(null);
+    setOcrError(null);
+    setOcrResult(null);
     const formData = new FormData();
     formData.append("file", file);
     formData.append("documentId", documentId);
@@ -185,16 +192,125 @@ export default function DocumentsPage() {
 
     try {
       const res = await fetch("/api/files", { method: "POST", body: formData });
+      if (!res.ok) {
+        const text = await res.text();
+        setUploadError(`Upload failed (${res.status}): ${text.substring(0, 200)}`);
+        setUploading(null);
+        return;
+      }
       const data = await res.json();
       if (data.ok) {
-        // Refresh files list
         const updated = await fetch("/api/files").then((r) => r.json());
         if (Array.isArray(updated)) setFiles(updated);
-        // Auto-set status to "have"
         updateDoc(documentId, "status", "have");
+
+        // Auto-OCR for all document types (images and PDFs)
+        const isReadable = file.type.startsWith("image/") || file.type === "application/pdf";
+        if (isReadable) {
+          setOcrLoading(documentId);
+          setOcrError(null);
+          try {
+            const ocrForm = new FormData();
+            ocrForm.append("file", file);
+            ocrForm.append("category", category);
+            const ocrRes = await fetch("/api/ocr-document", { method: "POST", body: ocrForm });
+            const ocrData = await ocrRes.json();
+            if (ocrData.ok && ocrData.data) {
+              setOcrResult({ docId: documentId, data: ocrData.data });
+              // Auto-update income if it's a payslip
+              if (ocrData.data.documentType === "payslip" && ocrData.data.employeeName) {
+                const d = ocrData.data;
+                const grossPay = d.grossPay || 0;
+                const netPay = d.netPay || 0;
+                const freq = d.payFrequency === "monthly" ? 12 : d.payFrequency === "weekly" ? 52 : 26;
+                try {
+                  await fetch("/api/incomes", {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      id: `income-${(d.employeeName as string).toLowerCase().replace(/[^a-z]/g, "")}`,
+                      name: d.employeeName,
+                      employer: d.employer || "",
+                      jobTitle: d.jobTitle || "",
+                      annualGross: d.annualSalary || d.annualGross || (grossPay * freq),
+                      annualNet: d.annualNet || (netPay * freq),
+                      grossFortnightly: d.payFrequency === "fortnightly" ? grossPay : (grossPay * freq / 26),
+                      netFortnightly: d.fortnightlyNet || (d.payFrequency === "fortnightly" ? netPay : (netPay * freq / 26)),
+                      taxWithheld: d.taxWithheld || 0,
+                      superannuation: d.superannuation || 0,
+                      superRate: d.superRate || 11.5,
+                      payFrequency: d.payFrequency || "fortnightly",
+                      hourlyRate: d.hourlyRate || 0,
+                      lastUpdated: new Date().toISOString(),
+                      source: "ocr-payslip",
+                    }),
+                  });
+                } catch { /* income update is best-effort */ }
+              }
+              // Auto-update expenses if it's a bank/expense statement
+              if ((ocrData.data.documentType === "expense_statement" || ocrData.data.documentType === "bank_statement") && ocrData.data.expensesByCategory) {
+                try {
+                  const cats = ocrData.data.expensesByCategory as Record<string, number>;
+                  const months = (ocrData.data.monthsCovered as number) || 1;
+                  const expenses = Object.entries(cats)
+                    .filter(([, amount]) => amount > 0)
+                    .map(([cat, amount]) => ({
+                      id: `exp-${cat.toLowerCase().replace(/[^a-z]/g, "")}`,
+                      category: cat,
+                      description: `From bank statement (${ocrData.data.statementPeriod || "uploaded"})`,
+                      amount: Math.round(amount / months),
+                      frequency: "monthly" as const,
+                    }));
+                  if (expenses.length > 0) {
+                    // Fetch existing expenses and merge — don't overwrite
+                    const existingRes = await fetch("/api/expenses");
+                    const existing = await existingRes.json();
+                    const existingMap = new Map((existing || []).map((e: { id: string }) => [e.id, e]));
+                    // Update matching categories, add new ones, keep non-OCR ones
+                    for (const exp of expenses) {
+                      existingMap.set(exp.id, exp);
+                    }
+                    await fetch("/api/expenses", {
+                      method: "PUT",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify(Array.from(existingMap.values())),
+                    });
+                  }
+                } catch { /* expense update is best-effort */ }
+              }
+              // Auto-update super balance on assets page
+              if (ocrData.data.documentType === "super_statement" && ocrData.data.balance) {
+                try {
+                  const d = ocrData.data;
+                  const memberName = (d.memberName as string) || person;
+                  await fetch("/api/assets", {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify([{
+                      id: `super-${memberName.toLowerCase().replace(/[^a-z]/g, "")}`,
+                      owner: memberName,
+                      category: "Superannuation",
+                      description: `${d.fundName || "Super"} — ${d.memberNumber || ""}`.trim(),
+                      estimatedValue: d.balance,
+                      notes: `Updated from statement. ${d.investmentOption || ""}`.trim(),
+                      relevantForLending: false,
+                    }]),
+                  });
+                } catch { /* asset update is best-effort */ }
+              }
+            } else {
+              setOcrError(ocrData.error || "OCR returned no data");
+            }
+          } catch (err) {
+            setOcrError("OCR failed: " + String(err));
+          }
+          setOcrLoading(null);
+        }
+      } else {
+        setUploadError(`Upload failed: ${data.error || res.status}`);
       }
     } catch (e) {
-      console.error("Upload failed:", e);
+      setUploadError("Upload failed: " + String(e));
     }
     setUploading(null);
   }
@@ -239,69 +355,77 @@ export default function DocumentsPage() {
   if (!loaded) return null;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-4 sm:space-y-8">
       <div>
-        <h2 className="text-2xl font-bold mb-1">Document Vault</h2>
-        <p className="text-[var(--muted)]">
-          Everything your broker and bank will need — track what you have and what&apos;s missing
+        <h2 className="text-xl sm:text-2xl font-bold mb-1">Document Vault</h2>
+        <p className="text-[var(--muted)] text-sm">
+          Everything your broker and bank will need
         </p>
       </div>
 
-      {/* Readiness Summary */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-        <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-4">
-          <div className="text-[var(--muted)] text-xs mb-1">Broker Ready</div>
-          <div className="text-2xl font-bold text-[var(--accent)]">{readyPercent}%</div>
-          <div className="w-full bg-[var(--card-border)] rounded-full h-1.5 mt-2">
-            <div className="bg-[var(--accent)] h-1.5 rounded-full" style={{ width: `${readyPercent}%` }} />
+      {/* Error display */}
+      {uploadError && (
+        <div className="bg-[var(--negative)]/10 border border-[var(--negative)]/30 rounded-lg p-3 text-xs text-[var(--negative)] flex justify-between items-center">
+          <span className="break-all">{uploadError}</span>
+          <button onClick={() => setUploadError(null)} className="text-xs ml-2 shrink-0">dismiss</button>
+        </div>
+      )}
+
+      {/* Readiness Summary — 3 cols on mobile, 5 on desktop */}
+      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 sm:gap-4">
+        <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-3 sm:p-4">
+          <div className="text-[var(--muted)] text-[10px] sm:text-xs mb-1">Ready</div>
+          <div className="text-lg sm:text-2xl font-bold text-[var(--accent)]">{readyPercent}%</div>
+          <div className="w-full bg-[var(--card-border)] rounded-full h-1 mt-1">
+            <div className="bg-[var(--accent)] h-1 rounded-full" style={{ width: `${readyPercent}%` }} />
           </div>
         </div>
-        <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-4">
-          <div className="text-[var(--muted)] text-xs mb-1">Have</div>
-          <div className="text-2xl font-bold text-[var(--positive)]">{haveDocs}</div>
+        <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-3 sm:p-4">
+          <div className="text-[var(--muted)] text-[10px] sm:text-xs mb-1">Have</div>
+          <div className="text-lg sm:text-2xl font-bold text-[var(--positive)]">{haveDocs}</div>
         </div>
-        <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-4">
-          <div className="text-[var(--muted)] text-xs mb-1">Missing</div>
-          <div className="text-2xl font-bold text-[var(--negative)]">{missingDocs}</div>
+        <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-3 sm:p-4">
+          <div className="text-[var(--muted)] text-[10px] sm:text-xs mb-1">Missing</div>
+          <div className="text-lg sm:text-2xl font-bold text-[var(--negative)]">{missingDocs}</div>
         </div>
-        <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-4">
-          <div className="text-[var(--muted)] text-xs mb-1">Expired</div>
-          <div className="text-2xl font-bold text-yellow-500">{expiredDocs}</div>
+        <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-3 sm:p-4">
+          <div className="text-[var(--muted)] text-[10px] sm:text-xs mb-1">Expired</div>
+          <div className="text-lg sm:text-2xl font-bold text-yellow-500">{expiredDocs}</div>
         </div>
-        <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-4">
-          <div className="text-[var(--muted)] text-xs mb-1">Requested</div>
-          <div className="text-2xl font-bold text-[var(--accent)]">{requestedDocs}</div>
+        <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-3 sm:p-4">
+          <div className="text-[var(--muted)] text-[10px] sm:text-xs mb-1">Requested</div>
+          <div className="text-lg sm:text-2xl font-bold text-[var(--accent)]">{requestedDocs}</div>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-4">
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-[var(--muted)]">Person:</span>
+      <div className="space-y-2">
+        <div className="flex items-center gap-1.5 overflow-x-auto">
+          <span className="text-xs text-[var(--muted)] shrink-0">Person:</span>
           {["All", "Stuart", "Sasitron", "Property"].map((p) => (
             <button key={p} onClick={() => setFilterPerson(p)}
-              className={`text-xs px-3 py-1 rounded border transition-colors ${
+              className={`text-[11px] px-2 py-1 rounded border transition-colors shrink-0 ${
                 filterPerson === p
                   ? "border-[var(--accent)] text-[var(--accent)] bg-[var(--accent)]/10"
-                  : "border-[var(--card-border)] text-[var(--muted)] hover:border-[var(--accent)]"
+                  : "border-[var(--card-border)] text-[var(--muted)]"
               }`}>{p}</button>
           ))}
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-[var(--muted)]">Status:</span>
+        <div className="flex items-center gap-1.5 overflow-x-auto">
+          <span className="text-xs text-[var(--muted)] shrink-0">Status:</span>
           {["All", "missing", "have", "expired", "requested", "n/a"].map((s) => (
             <button key={s} onClick={() => setFilterStatus(s)}
-              className={`text-xs px-3 py-1 rounded border transition-colors capitalize ${
+              className={`text-[11px] px-2 py-1 rounded border transition-colors capitalize shrink-0 ${
                 filterStatus === s
                   ? "border-[var(--accent)] text-[var(--accent)] bg-[var(--accent)]/10"
-                  : "border-[var(--card-border)] text-[var(--muted)] hover:border-[var(--accent)]"
+                  : "border-[var(--card-border)] text-[var(--muted)]"
               }`}>{s}</button>
           ))}
+          <button onClick={resetAll}
+            className="text-[11px] px-2 py-1 rounded border border-[var(--card-border)] text-[var(--muted)] shrink-0 ml-auto">
+            Reset
+          </button>
         </div>
-        <button onClick={resetAll}
-          className="text-xs px-3 py-1 rounded border border-[var(--card-border)] text-[var(--muted)] hover:text-[var(--negative)] hover:border-[var(--negative)] transition-colors ml-auto">
-          Reset All
-        </button>
       </div>
 
       {/* Document Categories */}
@@ -330,9 +454,9 @@ export default function DocumentsPage() {
                 if (filterStatus !== "All" && doc.status !== filterStatus) return null;
 
                 return (
-                  <div key={doc.id} className="px-5 py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                  <div key={doc.id} className="px-3 sm:px-5 py-2.5 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="font-medium text-sm">{doc.name}</span>
                         <span className={`text-[10px] px-1.5 py-0.5 rounded ${
                           doc.forPerson === "Stuart" ? "bg-blue-500/20 text-blue-400" :
@@ -343,14 +467,14 @@ export default function DocumentsPage() {
                       </div>
                       <p className="text-xs text-[var(--muted)] mt-0.5">{doc.description}</p>
                     </div>
-                    <div className="flex flex-col gap-2 shrink-0 items-end">
+                    <div className="flex flex-col gap-1.5 shrink-0 items-end">
                       <div className="flex items-center gap-2">
                         <input
                           type="text"
                           value={doc.notes}
                           onChange={(e) => updateDoc(doc.id, "notes", e.target.value)}
                           placeholder="Notes..."
-                          className="bg-[var(--background)] border border-[var(--card-border)] rounded px-2 py-1 text-xs w-32 focus:border-[var(--accent)] outline-none"
+                          className="bg-[var(--background)] border border-[var(--card-border)] rounded px-2 py-1 text-xs w-24 sm:w-32 focus:border-[var(--accent)] outline-none"
                         />
                         <label className="text-xs px-2 py-1 rounded border border-[var(--card-border)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] cursor-pointer transition-colors">
                           {uploading === doc.id ? "..." : "Upload"}
@@ -387,6 +511,38 @@ export default function DocumentsPage() {
                           <option value="n/a">N/A</option>
                         </select>
                       </div>
+                      {/* OCR scanning indicator */}
+                      {ocrLoading === doc.id && (
+                        <div className="text-xs text-[var(--accent)] animate-pulse">Reading document...</div>
+                      )}
+                      {ocrError && ocrResult === null && ocrLoading === null && (
+                        <div className="text-xs text-[var(--negative)] bg-[var(--negative)]/10 rounded p-2 w-full max-w-sm">
+                          {ocrError}
+                        </div>
+                      )}
+                      {/* OCR results */}
+                      {ocrResult?.docId === doc.id && (
+                        <div className="bg-[var(--accent)]/10 border border-[var(--accent)]/30 rounded-lg p-3 text-xs space-y-1 w-full max-w-sm">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-medium text-[var(--accent)]">Extracted Data</span>
+                            <button onClick={() => setOcrResult(null)} className="text-[var(--muted)] hover:text-white">dismiss</button>
+                          </div>
+                          {Object.entries(ocrResult.data).map(([key, val]) => {
+                            if (val === null || val === undefined || val === 0 || val === "" || (Array.isArray(val) && val.length === 0)) return null;
+                            const label = key.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase());
+                            const display = typeof val === "number"
+                              ? val >= 100 ? `$${val.toLocaleString()}` : String(val)
+                              : Array.isArray(val) ? val.map((v: Record<string, unknown>) => `${v.name || v.type}: ${typeof v.amount === "number" ? `$${v.amount}` : v.hours}`).join(", ")
+                              : String(val);
+                            return (
+                              <div key={key} className="flex justify-between gap-2">
+                                <span className="text-[var(--muted)]">{label}</span>
+                                <span className="text-right font-medium">{display}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                       {/* Uploaded files */}
                       {getFilesForDoc(doc.id).map((f) => (
                         <div key={f.url} className="flex items-center gap-2 text-xs">
@@ -408,19 +564,24 @@ export default function DocumentsPage() {
         );
       })}
 
-      {/* Broker Pack Summary */}
-      <div className="rounded-lg border border-[var(--accent)]/30 bg-[var(--accent)]/5 p-5">
+      {/* Broker Pack */}
+      <div className="rounded-lg border border-[var(--positive)]/30 bg-[var(--positive)]/5 p-5">
         <div className="flex items-center justify-between mb-3">
-          <h4 className="font-semibold">Broker Pack</h4>
-          <span className="text-sm text-[var(--muted)]">{files.length} files uploaded</span>
+          <div>
+            <h4 className="font-semibold">Broker Pack</h4>
+            <p className="text-xs text-[var(--muted)] mt-1">{files.length} files uploaded — {haveDocs}/{totalDocs} documents ready</p>
+          </div>
+          {files.length > 0 && (
+            <a
+              href="/api/broker-pack-download"
+              className="px-4 py-2 bg-[var(--positive)] text-white rounded-lg text-sm font-medium hover:bg-green-600 transition-colors"
+            >
+              Download ZIP
+            </a>
+          )}
         </div>
-        <p className="text-sm text-[var(--muted)] mb-3">
-          Upload files against each document above. Use the naming convention:<br />
-          <code className="text-xs bg-[var(--background)] px-1 py-0.5 rounded">YYYY-MM_Category_Person_Description.pdf</code>
-        </p>
         {files.length > 0 && (
           <div className="space-y-2">
-            <div className="text-xs font-medium text-[var(--muted)] uppercase tracking-wide">All Uploaded Files</div>
             <div className="max-h-48 overflow-y-auto space-y-1">
               {files.map((f) => (
                 <div key={f.url} className="flex items-center justify-between text-xs">
@@ -434,9 +595,12 @@ export default function DocumentsPage() {
               ))}
             </div>
             <p className="text-xs text-[var(--muted)] pt-2">
-              To send to your broker: download each file from the links above, or share this page URL.
+              Files are organized into folders by category: BrokerPack/Identity/, BrokerPack/Income/, etc.
             </p>
           </div>
+        )}
+        {files.length === 0 && (
+          <p className="text-sm text-[var(--muted)]">Upload documents above. When ready, download them all as one ZIP file to send to your broker.</p>
         )}
       </div>
     </div>

@@ -76,6 +76,42 @@ export interface Asset {
   relevantForLending: boolean;
 }
 
+// ─── DISCOVER PROPERTY ────────────────────────────────────────
+
+export interface DiscoverProperty {
+  id: string;
+  address: string;
+  suburb: string;
+  state: string;
+  postcode: string;
+  price: number;
+  propertyType: "House" | "Unit" | "Land" | "Land+Build" | "Townhouse";
+  bedrooms: number | null;
+  bathrooms: number | null;
+  carSpaces: number | null;
+  landSize: number | null;
+  buildingSize: number | null;
+  yearBuilt: number | null;
+  estimatedWeeklyRent: number;
+  imageUrl: string;
+  listingUrl: string;
+  notes: string;
+  landPrice: number | null;
+  buildCost: number | null;
+  source: "manual" | "domain-api";
+  createdAt: string;
+}
+
+export interface WatchlistItem {
+  id: string;
+  propertyId: string;
+  property: DiscoverProperty;
+  status: "liked" | "passed";
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ─── ASSETS ────────────────────────────────────────────────────
 
 export const defaultAssets: Asset[] = [
