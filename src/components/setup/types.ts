@@ -51,7 +51,7 @@ export interface SetupState {
   bankBalance: number;
 }
 
-export const TOTAL_STEPS = 6;
+export const TOTAL_STEPS = 4;
 
 export function createPerson(name: string): Person {
   return {

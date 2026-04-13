@@ -10,7 +10,6 @@ import {
   TOTAL_STEPS,
 } from "@/components/setup/types";
 import StepWelcome from "@/components/setup/StepWelcome";
-import StepPayslips from "@/components/setup/StepPayslips";
 import StepProperties from "@/components/setup/StepProperties";
 import StepFinances from "@/components/setup/StepFinances";
 import StepResults from "@/components/setup/StepResults";
@@ -182,49 +181,38 @@ export default function SetupPage() {
         {state.step === 1 && (
           <StepWelcome
             people={state.people}
-            onNext={(people) => {
-              setPeople(people);
-              setStep(2);
-            }}
+            onUpdate={setPeople}
+            onNext={() => setStep(2)}
           />
         )}
 
         {state.step === 2 && (
-          <StepPayslips
+          <StepProperties
+            properties={state.properties}
             people={state.people}
-            onUpdate={setPeople}
+            onUpdate={setProperties}
             onNext={() => setStep(3)}
             onBack={() => setStep(1)}
           />
         )}
 
         {state.step === 3 && (
-          <StepProperties
+          <StepFinances
             properties={state.properties}
-            people={state.people}
-            onUpdate={setProperties}
+            bankBalance={state.bankBalance}
+            onUpdateProperty={updateProperty}
+            onUpdateBank={(v) => setState((s) => ({ ...s, bankBalance: v }))}
             onNext={() => setStep(4)}
             onBack={() => setStep(2)}
           />
         )}
 
         {state.step === 4 && (
-          <StepFinances
-            properties={state.properties}
-            bankBalance={state.bankBalance}
-            onUpdateProperty={updateProperty}
-            onUpdateBank={(v) => setState((s) => ({ ...s, bankBalance: v }))}
-            onNext={() => setStep(5)}
-            onBack={() => setStep(3)}
-          />
-        )}
-
-        {state.step === 5 && (
           <StepResults
             people={state.people}
             properties={state.properties}
             bankBalance={state.bankBalance}
-            onBack={() => setStep(4)}
+            onBack={() => setStep(3)}
             onFinish={handleFinish}
             saving={saving}
           />
