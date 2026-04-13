@@ -220,6 +220,10 @@ export default function DocumentsPage() {
     return files.filter((f) => f.documentId === documentId);
   }
 
+  function getDownloadUrl(blobUrl: string) {
+    return `/api/files/download?url=${encodeURIComponent(blobUrl)}`;
+  }
+
   function formatFileSize(bytes: number) {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -406,7 +410,7 @@ export default function DocumentsPage() {
                       {/* Uploaded files */}
                       {getFilesForDoc(doc.id).map((f) => (
                         <div key={f.url} className="flex items-center gap-2 text-xs">
-                          <a href={f.url} target="_blank" rel="noopener noreferrer"
+                          <a href={getDownloadUrl(f.url)} target="_blank" rel="noopener noreferrer"
                             className="text-[var(--accent)] hover:underline truncate max-w-[180px]">
                             {f.originalName}
                           </a>
@@ -447,7 +451,7 @@ export default function DocumentsPage() {
                 <div key={f.url} className="flex items-center justify-between text-xs">
                   <div className="flex items-center gap-2 min-w-0">
                     <span className="text-[var(--muted)] shrink-0">{f.category}</span>
-                    <a href={f.url} target="_blank" rel="noopener noreferrer"
+                    <a href={getDownloadUrl(f.url)} target="_blank" rel="noopener noreferrer"
                       className="text-[var(--accent)] hover:underline truncate">{f.originalName}</a>
                   </div>
                   <span className="text-[var(--muted)] shrink-0 ml-2">{formatFileSize(f.size)}</span>
