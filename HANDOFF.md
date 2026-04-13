@@ -5,9 +5,9 @@
 ---
 
 ## Last Updated
-2026-04-09
+2026-04-13
 
-## Last Session Summary (2026-04-09)
+## Previous Session Summary (2026-04-09)
 Major session — authentication, mobile UI, data persistence, OCR:
 
 ### Authentication System
@@ -16,7 +16,6 @@ Major session — authentication, mobile UI, data persistence, OCR:
 - AuthGuard component redirects unauthenticated users
 - All 10+ API routes now filter by userId
 - Migration endpoint (`POST /api/migrate`) claims existing data
-- Migrate button on dashboard (run once, then can be removed)
 
 ### Discover Page (Property Swipe)
 - Rebuilt for mobile-first: compact search form, minimal UI
@@ -33,33 +32,45 @@ Major session — authentication, mobile UI, data persistence, OCR:
 - Strategy page plan/assumptions auto-save to MongoDB
 - Both pages now use DB hooks instead of hardcoded data.ts
 
-### Payslip OCR
-- New `/api/ocr-payslip` endpoint using Claude Sonnet vision
-- Auto-triggers when uploading Income & Employment documents
-- Extracts: name, employer, gross/net pay, YTD, super, tax, allowances
+### OCR (Two Endpoints)
+- `/api/ocr-payslip` — payslip-specific OCR using Claude Sonnet vision
+- `/api/ocr-document` — general OCR for all document types (ID, bank statements, loans, insurance, super, rates, leases)
+- Auto-triggers when uploading documents to the broker checklist
+- Bank statement OCR categorises all transactions into expense categories
 
-### Mobile Fixes
-- Proper Viewport export with userScalable=false
-- Smart touch handling, responsive padding, overflow-x-hidden
+### Other Features Added
+- Broker Pack ZIP download (`/api/broker-pack-download`)
+- Dashboard "Next Property" progress tracker
+- Fixed mobile layout for iPhone (documents page, filters, summary cards)
+
+---
+
+## Current Session (2026-04-13)
+Branch: `claude/fix-ocr-private-blob-auth-itbcD`
+
+### Session Focus
+- Updated CLAUDE.md and HANDOFF.md to reflect current codebase state
+- Identified that Vercel Blob files are stored with `access: "private"` — fetching these URLs from server-side code requires a Bearer token (`BLOB_READ_WRITE_TOKEN`)
+
+### Known Issue: OCR + Private Blob Auth
+- Files uploaded via `/api/files` are stored in Vercel Blob with `access: "private"`
+- If any OCR route needs to fetch a file by URL (rather than receiving it as a direct upload), it must include `Authorization: Bearer <BLOB_READ_WRITE_TOKEN>` in the fetch headers
+- Current OCR routes (`ocr-payslip`, `ocr-document`) receive files directly as formData uploads, so they work — but any future "re-OCR from stored URL" feature would need the auth header
 
 ## Current Branch
-`claude/review-handoff-safety-tY8ju`
+`claude/fix-ocr-private-blob-auth-itbcD`
 
 ## What's Working
 - Login (Google + email), per-user data isolation
-- Dashboard, Properties, Finances, Assets, Discover, Borrowing, Strategy, Documents, Roadmap, Tax Guide
-- Document upload (Vercel Blob) + payslip OCR
-- RapidAPI property search + swipe
-
-### Additional Work (later in session)
-- Document upload working with Vercel Blob (private store)
-- General OCR for ALL document types (ID, bank, loans, insurance, etc.)
-- Payslip OCR auto-populates income fields (gross, net, employer, job title)
-- Bank statement OCR categorises all transactions into expense categories
-- Broker Pack ZIP download button
-- Dashboard "Next Property" progress tracker (75% ready to buy)
-- Fixed mobile layout for iPhone (documents page, filters, summary cards)
-- Fixed desktop layout after mobile changes
+- Dashboard with "Next Property" progress tracker
+- Properties, Finances, Assets pages (CRUD, per-user)
+- Discover page (RapidAPI search + Tinder-style swipe + watchlist)
+- Borrowing calculator (auto-saves inputs)
+- Strategy planner (auto-saves plan)
+- Documents page (broker checklist + file upload + OCR)
+- Roadmap, Tax Guide pages
+- Payslip OCR + General document OCR (all types)
+- Broker Pack ZIP download
 
 ## What's Not Done Yet
 - [ ] Email broker pack directly to broker
@@ -69,6 +80,7 @@ Major session — authentication, mobile UI, data persistence, OCR:
 - [ ] Remove Migrate/Seed buttons after use
 - [ ] Password hashing (needs bcrypt)
 - [ ] Duplicate income record cleanup (OCR creates new vs updating existing)
+- [ ] Private blob auth for re-OCR from stored URL (if needed in future)
 
 ## Notes for Next Claude
 - Read `CLAUDE.md` first for full context
@@ -77,3 +89,5 @@ Major session — authentication, mobile UI, data persistence, OCR:
 - Mobile-first is critical (iPad/iPhone)
 - `.npmrc` with `legacy-peer-deps=true` required for Vercel
 - No middleware.ts — deprecated in Next.js 16
+- Vercel Blob files are **private** — need Bearer token to fetch by URL
+- Existing tags: `v0-baseline-2026-04-10`, `v1.0-2026-04-10`

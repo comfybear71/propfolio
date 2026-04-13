@@ -10,7 +10,7 @@ Propfolio is a multi-user property portfolio tracker for Australian property inv
 - **Auth:** NextAuth v5 (beta) with Google OAuth + email/password, MongoDB adapter
 - **Hosting:** Vercel
 - **File Storage:** Vercel Blob Storage (document uploads)
-- **AI/OCR:** Anthropic Claude API (payslip reading)
+- **AI/OCR:** Anthropic Claude API (payslip + general document OCR)
 - **Property Search:** RapidAPI (realestate.com.au listings)
 - **Charts:** Recharts (planned - not yet added)
 
@@ -48,9 +48,11 @@ propfolio/
 │   │   ├── rapidapi-search/        # RapidAPI property search proxy
 │   │   ├── domain-search/          # Domain API property search proxy
 │   │   ├── ocr-payslip/            # Claude Vision OCR for payslips
+│   │   ├── ocr-document/           # Claude Vision OCR for all document types
 │   │   ├── seed/                   # Seed demo data for new users
 │   │   ├── migrate/                # One-time data migration (claim existing data)
-│   │   └── broker-pack/            # Broker pack file listing
+│   │   ├── broker-pack/            # Broker pack file listing
+│   │   └── broker-pack-download/   # Broker pack ZIP download
 │   ├── components/
 │   │   ├── NavBar.tsx              # Responsive nav with auth (sign out)
 │   │   └── AuthGuard.tsx           # Client-side auth redirect
@@ -94,7 +96,7 @@ propfolio/
 - `AUTH_TRUST_HOST` — `true`
 - `GOOGLE_CLIENT_ID` — Google OAuth client ID
 - `GOOGLE_CLIENT_SECRET` — Google OAuth client secret
-- `ANTHROPIC_API_KEY` — For payslip OCR
+- `ANTHROPIC_API_KEY` — For payslip + document OCR
 - `RAPIDAPI_KEY` — For realestate.com.au property search
 - `BLOB_READ_WRITE_TOKEN` — Vercel Blob Storage
 
@@ -173,3 +175,4 @@ propfolio/
 | 2026-04-09 | iPhone page wobble on swipe | Detect horizontal vs vertical touch, only capture horizontal |
 | 2026-04-09 | Like button causes card glitch | Defer DB save until after exit animation completes |
 | 2026-04-09 | Pinch-to-zoom on iPhone | Added `userScalable: false` to Viewport export |
+| 2026-04-13 | Vercel Blob files stored as `access: "private"` | Fetching private blob URLs requires Bearer token (BLOB_READ_WRITE_TOKEN) |
