@@ -102,6 +102,7 @@ function PropertyCard({
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [apiReturnedValue, setApiReturnedValue] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
 
   useEffect(() => {
@@ -157,6 +158,7 @@ function PropertyCard({
           valueHigh: pe?.upperPrice || 0,
           photos: p.photos || [],
         });
+        if (pe?.midPrice) setApiReturnedValue(true);
       }
     } catch { /* property lookup failed — address still saved */ }
     setLoading(false);
@@ -248,8 +250,8 @@ function PropertyCard({
         </div>
       )}
 
-      {/* Manual value entry if API didn't return estimate */}
-      {property.address && !property.estimatedValue && !loading && (
+      {/* Manual value entry — always shown when API didn't provide value */}
+      {property.address && !apiReturnedValue && !loading && (
         <div>
           <label className="text-xs text-[var(--muted)]">Estimated property value</label>
           <div className="relative">
