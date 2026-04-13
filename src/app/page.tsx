@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { formatCurrency } from "@/lib/data";
 import { useProperties, useLoans, useIncomes, useBorrowingSettings } from "@/lib/useData";
 
@@ -18,7 +19,23 @@ export default function Dashboard() {
     newLoanRate: 6.5, newLoanTerm: 30, expectedRent: 600,
     useEquity: true, claimBuildBonus: true,
   });
+  const router = useRouter();
   const [docStats, setDocStats] = useState({ total: 0, have: 0, loaded: false });
+
+  // Redirect new users to setup wizard if they have no income data
+  useEffect(() => {
+    if (iLoaded && incomes.length === 0) {
+      // Check if they have any real data — if not, send to setup
+      fetch("/api/borrowing-settings")
+        .then((r) => r.json())
+        .then((settings) => {
+          if (!settings?.setupComplete) {
+            router.replace("/setup");
+          }
+        })
+        .catch(() => {});
+    }
+  }, [iLoaded, incomes.length, router]);
 
   useEffect(() => {
     fetch("/api/documents").then(r => r.json()).then(docs => {
