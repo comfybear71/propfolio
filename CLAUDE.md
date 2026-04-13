@@ -125,14 +125,14 @@ propfolio/
 ## Setup Wizard (/setup)
 - **First-time user detection:** Dashboard checks for empty incomes + no `setupComplete` flag → redirects to `/setup`
 - **Multi-person:** Any number of people (investors, partners, family)
-- **Step 1:** Enter names of all investors
-- **Step 2:** Upload one payslip PDF per person → OCR extracts income automatically
-- **Step 3:** Enter property addresses → Domain API autocomplete + property details + price estimate
-- **Step 4:** Enter loan balance, interest rate, offset balance, bank savings per property
-- **Step 5:** Summary — shows combined borrowing power, equity, portfolio overview
+- **Step 1:** Upload payslip PDF per person → OCR extracts name, employer, income automatically (no manual name entry)
+- **Step 2:** Enter property addresses → Domain API autocomplete (when available) + manual entry fallback + manual property value
+- **Step 3:** Enter loan balance, interest rate, offset balance, bank savings per property
+- **Step 4:** Summary — shows combined borrowing power, equity, portfolio overview
 - **On completion:** Saves all data to existing collections (incomes, properties, loans, assets) + sets `setupComplete` flag
 - **OCR:** ONLY payslips. No OCR for bank statements, ID, or other documents. Users enter expenses manually.
 - **NavBar hidden** during setup wizard for clean experience
+- **Known issue:** Wizard creates new records instead of matching existing — can cause duplicates if run twice. Needs dedup logic or CRUD delete.
 
 ## Discover Page (Property Search + Swipe)
 - **Search results are in-memory only** — never saved to DB until liked
@@ -195,3 +195,6 @@ propfolio/
 | 2026-04-09 | Like button causes card glitch | Defer DB save until after exit animation completes |
 | 2026-04-09 | Pinch-to-zoom on iPhone | Added `userScalable: false` to Viewport export |
 | 2026-04-13 | Vercel Blob files stored as `access: "private"` | Fetching private blob URLs requires Bearer token (BLOB_READ_WRITE_TOKEN) |
+| 2026-04-13 | Domain API access pending | Address Suggestions, Properties & Locations, Rental AVM all requested — waiting for Domain approval. Contact form submitted to api@domain.com.au. Manual entry works as fallback. |
+| 2026-04-13 | Setup wizard creates duplicate records | Running wizard when data already exists creates duplicates. Need CRUD delete or dedup logic. |
+| 2026-04-13 | Property value field disappeared while typing | Fixed — was using `!estimatedValue` as condition, now tracks API vs manual separately |
