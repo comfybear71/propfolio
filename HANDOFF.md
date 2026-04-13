@@ -76,11 +76,29 @@ All work merged to `master`. No active feature branch.
 - Domain API code ready (activates when access approved)
 
 ## What's Not Done Yet — Next Session Priorities
-- [ ] **CRUD delete for properties/loans/incomes** — remove duplicate test data
-- [ ] **Investment/Home toggle on Discover page** — investors see yield, home buyers see schools/suburb stats
+
+### Priority 1: CRUD (Create/Read/Update/Delete) for ALL data
+- [ ] **Delete buttons** on Properties, Loans, Incomes, Expenses, Assets pages
+- [ ] **Edit all fields** — names, values, addresses (user needs to fix misspelled wife's name "Sasiron" → "Sasitron")
+- [ ] **Add new records** from each page (not just via setup wizard)
+- [ ] Remove the 4 duplicate properties/loans from Stuart's test data
+- [ ] Finances page already has Edit buttons — needs Delete too
+- [ ] Properties page needs Edit + Delete
+- [ ] If all income deleted, user can re-upload payslip via setup wizard to re-add
+
+### Priority 2: AI-Assisted Strategy & Roadmap
+- [ ] **AI strategy advisor** — use Claude API to analyse user's portfolio and suggest personalised next steps
+- [ ] **AI roadmap generation** — auto-generate phased plan based on actual income, equity, goals
+- [ ] The Roadmap page already has good structure (Phase 1: Foundation, etc.) — enhance with AI that reads the user's real data
+- [ ] Strategy page Year-by-Year Build Plan could be auto-populated from AI analysis
+
+### Priority 3: Discover Page Enhancements
+- [ ] **Investment/Home toggle** — investors see yield, home buyers see schools/suburb stats
 - [ ] **Wire up Domain API when approved** — autocomplete, property details, rental yield
 - [ ] **Switch Discover to Domain API** (replace or supplement RapidAPI)
 - [ ] Domain API: rich listing data (yield via `annualReturn`, tenant info, comparable sales, `isNewDevelopment` flag)
+
+### Priority 4: Other
 - [ ] Email broker pack directly to broker
 - [ ] Charts/graphs (Recharts)
 - [ ] Password hashing (needs bcrypt)
