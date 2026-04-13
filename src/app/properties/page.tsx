@@ -6,8 +6,8 @@ import { formatCurrency, formatCurrencyExact, type Property, type Loan } from "@
 import { useProperties, useLoans } from "@/lib/useData";
 
 export default function PropertiesPage() {
-  const { properties: propertyData, saveProperty, loaded: pLoaded } = useProperties();
-  const { loans: loanData, saveLoan, loaded: lLoaded } = useLoans();
+  const { properties: propertyData, saveProperty, removeProperty, loaded: pLoaded } = useProperties();
+  const { loans: loanData, saveLoan, removeLoan, loaded: lLoaded } = useLoans();
   const [editing, setEditing] = useState<string | null>(null);
 
   if (!pLoaded || !lLoaded) {
@@ -72,6 +72,21 @@ export default function PropertiesPage() {
                 >
                   {isEditing ? "Done" : "Edit"}
                 </button>
+                {isEditing && (
+                  <button
+                    onClick={() => {
+                      if (confirm(`Delete ${property.address}? This will also remove the associated loan.`)) {
+                        const loan = getLoan(property.id);
+                        removeProperty(property.id);
+                        if (loan) removeLoan(loan.id);
+                        setEditing(null);
+                      }
+                    }}
+                    className="text-xs px-3 py-1 rounded border border-[var(--negative)]/30 text-[var(--negative)] hover:bg-[var(--negative)]/10 transition-colors"
+                  >
+                    Delete
+                  </button>
+                )}
               </div>
             </div>
 

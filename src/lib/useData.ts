@@ -37,7 +37,12 @@ export function useProperties() {
     }).catch(() => {});
   }, []);
 
-  return { properties: data, setProperties: setData, saveProperty: save, loaded };
+  const remove = useCallback(async (id: string) => {
+    setData((prev) => prev.filter((p) => p.id !== id));
+    await fetch(`/api/properties?id=${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => {});
+  }, []);
+
+  return { properties: data, setProperties: setData, saveProperty: save, removeProperty: remove, loaded };
 }
 
 export function useLoans() {
@@ -61,7 +66,12 @@ export function useLoans() {
     }).catch(() => {});
   }, []);
 
-  return { loans: data, setLoans: setData, saveLoan: save, loaded };
+  const remove = useCallback(async (id: string) => {
+    setData((prev) => prev.filter((l) => l.id !== id));
+    await fetch(`/api/loans?id=${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => {});
+  }, []);
+
+  return { loans: data, setLoans: setData, saveLoan: save, removeLoan: remove, loaded };
 }
 
 export function useIncomes() {
