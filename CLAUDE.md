@@ -10,7 +10,8 @@ Propfolio is a multi-user property portfolio tracker for Australian property inv
 - **Auth:** NextAuth v5 (beta) with Google OAuth + email/password, MongoDB adapter
 - **Hosting:** Vercel
 - **File Storage:** Vercel Blob Storage (document uploads)
-- **AI/OCR:** Anthropic Claude API (payslip + general document OCR)
+- **AI/OCR:** Anthropic Claude API (payslip OCR only — setup wizard)
+- **Property Data:** Domain.com.au API (address autocomplete, property details, price estimates, suburb stats)
 - **Property Search:** RapidAPI (realestate.com.au listings)
 - **Charts:** Recharts (planned - not yet added)
 
@@ -31,7 +32,8 @@ propfolio/
 │   │   ├── assets/page.tsx         # Assets tracker
 │   │   ├── roadmap/page.tsx        # Investment roadmap
 │   │   ├── documents/page.tsx      # Document vault / broker checklist + OCR
-│   │   └── tax-guide/page.tsx      # Australian property tax reference
+│   │   ├── tax-guide/page.tsx      # Australian property tax reference
+│   │   └── setup/page.tsx          # First-time setup wizard
 │   ├── app/api/
 │   │   ├── auth/[...nextauth]/     # NextAuth API route
 │   │   ├── properties/             # CRUD - user-scoped
@@ -46,19 +48,22 @@ propfolio/
 │   │   ├── borrowing-settings/     # Persisted borrowing calc inputs
 │   │   ├── strategy-settings/      # Persisted strategy plan inputs
 │   │   ├── rapidapi-search/        # RapidAPI property search proxy
-│   │   ├── domain-search/          # Domain API property search proxy
+│   │   ├── domain-search/          # Domain API listing search proxy
+│   │   ├── domain-suggest/         # Domain API address autocomplete
+│   │   ├── domain-property/        # Domain API property details + price
 │   │   ├── ocr-payslip/            # Claude Vision OCR for payslips
-│   │   ├── ocr-document/           # Claude Vision OCR for all document types
 │   │   ├── seed/                   # Seed demo data for new users
 │   │   ├── migrate/                # One-time data migration (claim existing data)
 │   │   ├── broker-pack/            # Broker pack file listing
 │   │   └── broker-pack-download/   # Broker pack ZIP download
 │   ├── components/
 │   │   ├── NavBar.tsx              # Responsive nav with auth (sign out)
-│   │   └── AuthGuard.tsx           # Client-side auth redirect
+│   │   ├── AuthGuard.tsx           # Client-side auth redirect
+│   │   └── setup/                  # Setup wizard step components
 │   └── lib/
 │       ├── data.ts                 # Financial data types, defaults, helpers
 │       ├── useData.ts              # React hooks for all DB collections
+│       ├── domainApi.ts            # Domain.com.au API shared OAuth + helpers
 │       ├── auth.ts                 # NextAuth configuration
 │       ├── apiAuth.ts              # getAuthDb() helper for API routes
 │       ├── getUser.ts              # getUserId() helper
@@ -96,8 +101,10 @@ propfolio/
 - `AUTH_TRUST_HOST` — `true`
 - `GOOGLE_CLIENT_ID` — Google OAuth client ID
 - `GOOGLE_CLIENT_SECRET` — Google OAuth client secret
-- `ANTHROPIC_API_KEY` — For payslip + document OCR
+- `ANTHROPIC_API_KEY` — For payslip OCR (setup wizard only)
 - `RAPIDAPI_KEY` — For realestate.com.au property search
+- `DOMAIN_CLIENT_ID` — Domain.com.au OAuth client ID
+- `DOMAIN_CLIENT_SECRET` — Domain.com.au OAuth client secret
 - `BLOB_READ_WRITE_TOKEN` — Vercel Blob Storage
 
 ### Google OAuth Setup
@@ -114,6 +121,18 @@ propfolio/
 - **Mobile-first design** — must work well on iPhone/iPad
 - **Viewport:** uses Next.js Viewport export with userScalable=false
 - **overflow-x-hidden** on body to prevent horizontal scroll
+
+## Setup Wizard (/setup)
+- **First-time user detection:** Dashboard checks for empty incomes + no `setupComplete` flag → redirects to `/setup`
+- **Multi-person:** Any number of people (investors, partners, family)
+- **Step 1:** Enter names of all investors
+- **Step 2:** Upload one payslip PDF per person → OCR extracts income automatically
+- **Step 3:** Enter property addresses → Domain API autocomplete + property details + price estimate
+- **Step 4:** Enter loan balance, interest rate, offset balance, bank savings per property
+- **Step 5:** Summary — shows combined borrowing power, equity, portfolio overview
+- **On completion:** Saves all data to existing collections (incomes, properties, loans, assets) + sets `setupComplete` flag
+- **OCR:** ONLY payslips. No OCR for bank statements, ID, or other documents. Users enter expenses manually.
+- **NavBar hidden** during setup wizard for clean experience
 
 ## Discover Page (Property Search + Swipe)
 - **Search results are in-memory only** — never saved to DB until liked

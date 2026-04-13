@@ -137,9 +137,6 @@ export default function DocumentsPage() {
   const [filterStatus, setFilterStatus] = useState<string>("All");
   const [uploading, setUploading] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [ocrResult, setOcrResult] = useState<{ docId: string; data: Record<string, unknown> } | null>(null);
-  const [ocrLoading, setOcrLoading] = useState<string | null>(null);
-  const [ocrError, setOcrError] = useState<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(null);
 
   const saveDocuments = useCallback(async (docs: Document[]) => {
@@ -182,8 +179,6 @@ export default function DocumentsPage() {
   async function uploadFile(documentId: string, category: string, person: string, file: File) {
     setUploading(documentId);
     setUploadError(null);
-    setOcrError(null);
-    setOcrResult(null);
     const formData = new FormData();
     formData.append("file", file);
     formData.append("documentId", documentId);
@@ -203,109 +198,6 @@ export default function DocumentsPage() {
         const updated = await fetch("/api/files").then((r) => r.json());
         if (Array.isArray(updated)) setFiles(updated);
         updateDoc(documentId, "status", "have");
-
-        // Auto-OCR for all document types (images and PDFs)
-        const isReadable = file.type.startsWith("image/") || file.type === "application/pdf";
-        if (isReadable) {
-          setOcrLoading(documentId);
-          setOcrError(null);
-          try {
-            const ocrForm = new FormData();
-            ocrForm.append("file", file);
-            ocrForm.append("category", category);
-            const ocrRes = await fetch("/api/ocr-document", { method: "POST", body: ocrForm });
-            const ocrData = await ocrRes.json();
-            if (ocrData.ok && ocrData.data) {
-              setOcrResult({ docId: documentId, data: ocrData.data });
-              // Auto-update income if it's a payslip
-              if (ocrData.data.documentType === "payslip" && ocrData.data.employeeName) {
-                const d = ocrData.data;
-                const grossPay = d.grossPay || 0;
-                const netPay = d.netPay || 0;
-                const freq = d.payFrequency === "monthly" ? 12 : d.payFrequency === "weekly" ? 52 : 26;
-                try {
-                  await fetch("/api/incomes", {
-                    method: "PUT",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      id: `income-${(d.employeeName as string).toLowerCase().replace(/[^a-z]/g, "")}`,
-                      name: d.employeeName,
-                      employer: d.employer || "",
-                      jobTitle: d.jobTitle || "",
-                      annualGross: d.annualSalary || d.annualGross || (grossPay * freq),
-                      annualNet: d.annualNet || (netPay * freq),
-                      grossFortnightly: d.payFrequency === "fortnightly" ? grossPay : (grossPay * freq / 26),
-                      netFortnightly: d.fortnightlyNet || (d.payFrequency === "fortnightly" ? netPay : (netPay * freq / 26)),
-                      taxWithheld: d.taxWithheld || 0,
-                      superannuation: d.superannuation || 0,
-                      superRate: d.superRate || 11.5,
-                      payFrequency: d.payFrequency || "fortnightly",
-                      hourlyRate: d.hourlyRate || 0,
-                      lastUpdated: new Date().toISOString(),
-                      source: "ocr-payslip",
-                    }),
-                  });
-                } catch { /* income update is best-effort */ }
-              }
-              // Auto-update expenses if it's a bank/expense statement
-              if ((ocrData.data.documentType === "expense_statement" || ocrData.data.documentType === "bank_statement") && ocrData.data.expensesByCategory) {
-                try {
-                  const cats = ocrData.data.expensesByCategory as Record<string, number>;
-                  const months = (ocrData.data.monthsCovered as number) || 1;
-                  const expenses = Object.entries(cats)
-                    .filter(([, amount]) => amount > 0)
-                    .map(([cat, amount]) => ({
-                      id: `exp-${cat.toLowerCase().replace(/[^a-z]/g, "")}`,
-                      category: cat,
-                      description: `From bank statement (${ocrData.data.statementPeriod || "uploaded"})`,
-                      amount: Math.round(amount / months),
-                      frequency: "monthly" as const,
-                    }));
-                  if (expenses.length > 0) {
-                    // Fetch existing expenses and merge — don't overwrite
-                    const existingRes = await fetch("/api/expenses");
-                    const existing = await existingRes.json();
-                    const existingMap = new Map((existing || []).map((e: { id: string }) => [e.id, e]));
-                    // Update matching categories, add new ones, keep non-OCR ones
-                    for (const exp of expenses) {
-                      existingMap.set(exp.id, exp);
-                    }
-                    await fetch("/api/expenses", {
-                      method: "PUT",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify(Array.from(existingMap.values())),
-                    });
-                  }
-                } catch { /* expense update is best-effort */ }
-              }
-              // Auto-update super balance on assets page
-              if (ocrData.data.documentType === "super_statement" && ocrData.data.balance) {
-                try {
-                  const d = ocrData.data;
-                  const memberName = (d.memberName as string) || person;
-                  await fetch("/api/assets", {
-                    method: "PUT",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify([{
-                      id: `super-${memberName.toLowerCase().replace(/[^a-z]/g, "")}`,
-                      owner: memberName,
-                      category: "Superannuation",
-                      description: `${d.fundName || "Super"} — ${d.memberNumber || ""}`.trim(),
-                      estimatedValue: d.balance,
-                      notes: `Updated from statement. ${d.investmentOption || ""}`.trim(),
-                      relevantForLending: false,
-                    }]),
-                  });
-                } catch { /* asset update is best-effort */ }
-              }
-            } else {
-              setOcrError(ocrData.error || "OCR returned no data");
-            }
-          } catch (err) {
-            setOcrError("OCR failed: " + String(err));
-          }
-          setOcrLoading(null);
-        }
       } else {
         setUploadError(`Upload failed: ${data.error || res.status}`);
       }
@@ -511,38 +403,6 @@ export default function DocumentsPage() {
                           <option value="n/a">N/A</option>
                         </select>
                       </div>
-                      {/* OCR scanning indicator */}
-                      {ocrLoading === doc.id && (
-                        <div className="text-xs text-[var(--accent)] animate-pulse">Reading document...</div>
-                      )}
-                      {ocrError && ocrResult === null && ocrLoading === null && (
-                        <div className="text-xs text-[var(--negative)] bg-[var(--negative)]/10 rounded p-2 w-full max-w-sm">
-                          {ocrError}
-                        </div>
-                      )}
-                      {/* OCR results */}
-                      {ocrResult?.docId === doc.id && (
-                        <div className="bg-[var(--accent)]/10 border border-[var(--accent)]/30 rounded-lg p-3 text-xs space-y-1 w-full max-w-sm">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="font-medium text-[var(--accent)]">Extracted Data</span>
-                            <button onClick={() => setOcrResult(null)} className="text-[var(--muted)] hover:text-white">dismiss</button>
-                          </div>
-                          {Object.entries(ocrResult.data).map(([key, val]) => {
-                            if (val === null || val === undefined || val === 0 || val === "" || (Array.isArray(val) && val.length === 0)) return null;
-                            const label = key.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase());
-                            const display = typeof val === "number"
-                              ? val >= 100 ? `$${val.toLocaleString()}` : String(val)
-                              : Array.isArray(val) ? val.map((v: Record<string, unknown>) => `${v.name || v.type}: ${typeof v.amount === "number" ? `$${v.amount}` : v.hours}`).join(", ")
-                              : String(val);
-                            return (
-                              <div key={key} className="flex justify-between gap-2">
-                                <span className="text-[var(--muted)]">{label}</span>
-                                <span className="text-right font-medium">{display}</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
                       {/* Uploaded files */}
                       {getFilesForDoc(doc.id).map((f) => (
                         <div key={f.url} className="flex items-center gap-2 text-xs">

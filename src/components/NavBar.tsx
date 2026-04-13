@@ -23,8 +23,8 @@ export default function NavBar() {
   const [open, setOpen] = useState(false);
   const { data: session } = useSession();
 
-  // Don't show nav on login page
-  if (pathname === "/login") return null;
+  // Don't show nav on login or setup pages
+  if (pathname === "/login" || pathname === "/setup") return null;
 
   return (
     <nav className="border-b border-[var(--card-border)] px-3 sm:px-6 py-3">
