@@ -11,20 +11,21 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
 
   const isLoginPage = pathname === "/login";
   const isSetupPage = pathname === "/setup";
+  const isSharePage = pathname?.startsWith("/share/");
 
   useEffect(() => {
-    // Redirect to login if not authenticated
-    if (status === "unauthenticated" && !isLoginPage) {
+    // Redirect to login if not authenticated (skip share pages — public)
+    if (status === "unauthenticated" && !isLoginPage && !isSharePage) {
       router.replace("/login");
     }
     // Redirect away from login if already authenticated
     if (status === "authenticated" && isLoginPage) {
       router.replace("/");
     }
-  }, [status, isLoginPage, isSetupPage, router]);
+  }, [status, isLoginPage, isSetupPage, isSharePage, router]);
 
-  // On login page: always show it (unless authenticated, handled by redirect above)
-  if (isLoginPage) {
+  // Login and share pages: always show (share is public, login redirects authenticated users above)
+  if (isLoginPage || isSharePage) {
     return <>{children}</>;
   }
 

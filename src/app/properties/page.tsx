@@ -32,7 +32,7 @@ export default function PropertiesPage() {
     <div className="space-y-8">
       <div>
         <h2 className="text-2xl font-bold mb-1">Properties</h2>
-        <p className="text-[var(--muted)]">Click any value to edit. Changes are temporary until Supabase is connected.</p>
+        <p className="text-[var(--muted)]">Click Edit to modify any values. Changes save automatically.</p>
       </div>
 
       {propertyData.map((property) => {
