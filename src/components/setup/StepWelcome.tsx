@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { type Person, createPerson } from "./types";
 import { formatCurrency } from "@/lib/data";
 
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export default function StepWelcome({ people, onUpdate, onNext }: Props) {
+  const [editingId, setEditingId] = useState<string | null>(null);
   async function handleFileUpload(file: File) {
     // Add a placeholder person while OCR runs
     const newPerson = createPerson("Reading payslip...");
@@ -68,6 +70,31 @@ export default function StepWelcome({ people, onUpdate, onNext }: Props) {
 
   function removePerson(i: number) {
     onUpdate(people.filter((_, idx) => idx !== i));
+  }
+
+  function updatePersonName(i: number, name: string) {
+    const updated = [...people];
+    updated[i] = { ...updated[i], name };
+    onUpdate(updated);
+  }
+
+  function updatePersonIncome(i: number, field: keyof NonNullable<Person["income"]>, value: string | number) {
+    const updated = [...people];
+    const currentIncome = updated[i].income;
+    if (!currentIncome) return;
+    const nextIncome = { ...currentIncome, [field]: value };
+    // Auto-recalculate annual/fortnightly figures when core values change
+    if (field === "annualGross" && typeof value === "number") {
+      nextIncome.grossFortnightly = Math.round((value / 26) * 100) / 100;
+    } else if (field === "annualNet" && typeof value === "number") {
+      nextIncome.netFortnightly = Math.round((value / 26) * 100) / 100;
+    } else if (field === "grossFortnightly" && typeof value === "number") {
+      nextIncome.annualGross = Math.round(value * 26);
+    } else if (field === "netFortnightly" && typeof value === "number") {
+      nextIncome.annualNet = Math.round(value * 26);
+    }
+    updated[i] = { ...updated[i], income: nextIncome };
+    onUpdate(updated);
   }
 
   function retryUpload(i: number, file: File) {
@@ -146,20 +173,76 @@ export default function StepWelcome({ people, onUpdate, onNext }: Props) {
 
             {person.ocrDone && person.income && (
               <div className="space-y-2 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-base">{person.name}</span>
-                  <button
-                    onClick={() => removePerson(i)}
-                    className="text-xs text-[var(--muted)] hover:text-[var(--negative)]"
-                  >
-                    Remove
-                  </button>
+                <div className="flex items-center justify-between mb-2">
+                  {editingId === person.id ? (
+                    <input
+                      type="text"
+                      value={person.name}
+                      onChange={(e) => updatePersonName(i, e.target.value)}
+                      className="font-semibold text-base bg-[var(--background)] border border-[var(--accent)] rounded px-2 py-1 flex-1 mr-2 outline-none"
+                      autoFocus
+                    />
+                  ) : (
+                    <span className="font-semibold text-base">{person.name}</span>
+                  )}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => setEditingId(editingId === person.id ? null : person.id)}
+                      className="text-xs text-[var(--accent)] hover:underline"
+                    >
+                      {editingId === person.id ? "Done" : "Edit"}
+                    </button>
+                    <button
+                      onClick={() => removePerson(i)}
+                      className="text-xs text-[var(--muted)] hover:text-[var(--negative)]"
+                    >
+                      Remove
+                    </button>
+                  </div>
                 </div>
-                <Row label="Employer" value={person.income.employer} />
-                <Row label="Job Title" value={person.income.jobTitle} />
-                <Row label="Annual Gross" value={formatCurrency(person.income.annualGross)} highlight />
-                <Row label="Annual Net" value={formatCurrency(person.income.annualNet)} highlight />
-                <Row label="Net Fortnightly" value={formatCurrency(person.income.netFortnightly)} />
+                {editingId === person.id ? (
+                  <>
+                    <EditRow
+                      label="Employer"
+                      value={person.income.employer}
+                      onChange={(v) => updatePersonIncome(i, "employer", v)}
+                    />
+                    <EditRow
+                      label="Job Title"
+                      value={person.income.jobTitle}
+                      onChange={(v) => updatePersonIncome(i, "jobTitle", v)}
+                    />
+                    <EditNumRow
+                      label="Annual Gross"
+                      value={person.income.annualGross}
+                      onChange={(v) => updatePersonIncome(i, "annualGross", v)}
+                      prefix="$"
+                    />
+                    <EditNumRow
+                      label="Annual Net"
+                      value={person.income.annualNet}
+                      onChange={(v) => updatePersonIncome(i, "annualNet", v)}
+                      prefix="$"
+                    />
+                    <EditNumRow
+                      label="Net Fortnightly"
+                      value={person.income.netFortnightly}
+                      onChange={(v) => updatePersonIncome(i, "netFortnightly", v)}
+                      prefix="$"
+                    />
+                    <p className="text-xs text-[var(--muted)] pt-1">
+                      Tip: changing annual updates fortnightly automatically (and vice versa)
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <Row label="Employer" value={person.income.employer} />
+                    <Row label="Job Title" value={person.income.jobTitle} />
+                    <Row label="Annual Gross" value={formatCurrency(person.income.annualGross)} highlight />
+                    <Row label="Annual Net" value={formatCurrency(person.income.annualNet)} highlight />
+                    <Row label="Net Fortnightly" value={formatCurrency(person.income.netFortnightly)} />
+                  </>
+                )}
               </div>
             )}
 
@@ -233,6 +316,37 @@ function Row({ label, value, highlight }: { label: string; value: string; highli
     <div className="flex justify-between">
       <span className="text-[var(--muted)]">{label}</span>
       <span className={highlight ? "font-semibold text-[var(--positive)]" : ""}>{value}</span>
+    </div>
+  );
+}
+
+function EditRow({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="flex justify-between items-center gap-2">
+      <span className="text-[var(--muted)] shrink-0">{label}</span>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="bg-[var(--background)] border border-[var(--card-border)] rounded px-2 py-1 text-right flex-1 max-w-[200px] focus:border-[var(--accent)] outline-none"
+      />
+    </div>
+  );
+}
+
+function EditNumRow({ label, value, onChange, prefix }: { label: string; value: number; onChange: (v: number) => void; prefix?: string }) {
+  return (
+    <div className="flex justify-between items-center gap-2">
+      <span className="text-[var(--muted)] shrink-0">{label}</span>
+      <div className="flex items-center gap-1">
+        {prefix && <span className="text-[var(--muted)]">{prefix}</span>}
+        <input
+          type="number"
+          value={value || ""}
+          onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
+          className="bg-[var(--background)] border border-[var(--card-border)] rounded px-2 py-1 text-right w-32 focus:border-[var(--accent)] outline-none"
+        />
+      </div>
     </div>
   );
 }
