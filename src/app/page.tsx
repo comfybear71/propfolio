@@ -23,18 +23,10 @@ export default function Dashboard() {
   const router = useRouter();
   const [docStats, setDocStats] = useState({ total: 0, have: 0, loaded: false });
 
-  // Redirect new users to setup wizard if they have no income data
+  // Redirect to setup wizard if user has no income data (new user OR they deleted everything)
   useEffect(() => {
     if (iLoaded && incomes.length === 0) {
-      // Check if they have any real data — if not, send to setup
-      fetch("/api/borrowing-settings")
-        .then((r) => r.json())
-        .then((settings) => {
-          if (!settings?.setupComplete) {
-            router.replace("/setup");
-          }
-        })
-        .catch(() => {});
+      router.replace("/setup");
     }
   }, [iLoaded, incomes.length, router]);
 
