@@ -6,6 +6,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { formatCurrency } from "@/lib/data";
 import { useProperties, useLoans, useIncomes, useBorrowingSettings } from "@/lib/useData";
+import ShareButton from "@/components/ShareButton";
 
 export default function Dashboard() {
   const { properties, loaded: pLoaded } = useProperties();
@@ -137,9 +138,16 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h2 className="text-2xl font-bold mb-1">Dashboard</h2>
-        <p className="text-[var(--muted)]">Stuart & Sasitron — Portfolio Overview</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-bold mb-1">Dashboard</h2>
+          <p className="text-[var(--muted)]">
+            {incomes.length > 0
+              ? `${incomes.map(i => i.person?.split(" ")[0]).filter(Boolean).join(" & ")} — Portfolio Overview`
+              : "Portfolio Overview"}
+          </p>
+        </div>
+        <ShareButton />
       </div>
 
       {/* Next Property Progress Tracker */}
