@@ -28,11 +28,12 @@ export async function GET(req: NextRequest) {
     db.collection("incomes").find({ userId }).toArray(),
     db.collection("expenses").find({ userId }).toArray(),
     db.collection("assets").find({ userId }).toArray(),
-    db.collection("files").find({ userId }).project({ url: 0 }).toArray(), // hide actual URLs, just show metadata
+    db.collection("files").find({ userId }).toArray(),
   ]);
 
-  // Strip MongoDB _id fields
-  const clean = <T extends Record<string, unknown>>(arr: T[]) => arr.map(({ _id, userId, ...rest }) => { void _id; void userId; return rest; });
+  // Strip MongoDB _id and userId fields, and the raw blob URL (hide from public)
+  const clean = <T extends Record<string, unknown>>(arr: T[]) =>
+    arr.map(({ _id, userId, url, ...rest }) => { void _id; void userId; void url; return rest; });
 
   return NextResponse.json({
     ok: true,
