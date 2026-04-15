@@ -55,8 +55,18 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
 
   useEffect(() => {
     fetch(`/api/share/data?token=${encodeURIComponent(token)}`)
-      .then((r) => r.json())
+      .then(async (r) => {
+        // Handle non-JSON error responses (e.g. HTML 404 pages)
+        const contentType = r.headers.get("content-type") || "";
+        if (!contentType.includes("application/json")) {
+          setError(`Server returned ${r.status} (not JSON). The route may not be deployed yet.`);
+          setLoading(false);
+          return null;
+        }
+        return r.json();
+      })
       .then((res) => {
+        if (!res) return;
         if (res.ok) {
           setData(res.data);
           setSharedAt(res.sharedAt || "");
@@ -65,8 +75,8 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
         }
         setLoading(false);
       })
-      .catch(() => {
-        setError("Network error");
+      .catch((err) => {
+        setError("Network error: " + String(err));
         setLoading(false);
       });
   }, [token]);
@@ -82,11 +92,18 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
   if (error || !data) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center space-y-2 p-6">
-          <div className="text-lg font-bold text-[var(--negative)]">{error}</div>
+        <div className="max-w-md text-center space-y-3 p-6">
+          <div className="text-xl font-bold">
+            <span className="text-[var(--accent)]">Prop</span>folio
+          </div>
+          <div className="text-lg font-bold text-[var(--negative)]">{error || "Could not load shared portfolio"}</div>
           <p className="text-sm text-[var(--muted)]">
-            This share link may have been revoked or is invalid.
+            This share link may have been revoked or is invalid. Please contact the person
+            who shared it with you for a new link.
           </p>
+          <div className="text-xs text-[var(--muted)] bg-[var(--card)] border border-[var(--card-border)] rounded p-2 font-mono break-all">
+            Token: {token.substring(0, 16)}...
+          </div>
         </div>
       </div>
     );
