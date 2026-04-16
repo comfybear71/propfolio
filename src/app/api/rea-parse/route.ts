@@ -120,48 +120,24 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Note: REA shows valuation data only to signed-in users, so server-side
+  // scraping can't get the key numbers. This endpoint is kept for basic
+  // public data (sale history, address). For valuations, users upload
+  // screenshots via /api/ocr-rea-screenshot instead.
+
   try {
-    const scrapingBeeKey = process.env.SCRAPINGBEE_KEY;
-
-    // Route through ScrapingBee if configured — bypasses REA's 429 block
-    // on cloud IPs by using residential proxy IPs
-    let fetchUrl: string;
-    let fetchOptions: RequestInit;
-
-    if (scrapingBeeKey) {
-      // ScrapingBee proxy — handles anti-bot detection
-      const params = new URLSearchParams({
-        api_key: scrapingBeeKey,
-        url,
-        render_js: "false", // REA serves data server-side in __NEXT_DATA__
-        premium_proxy: "true", // residential IPs
-        country_code: "au",
-      });
-      fetchUrl = `https://app.scrapingbee.com/api/v1/?${params.toString()}`;
-      fetchOptions = {
-        next: { revalidate: 3600 },
-      };
-    } else {
-      // Direct fetch (will likely fail with 429 from Vercel IPs)
-      fetchUrl = url;
-      fetchOptions = {
-        headers: {
-          "User-Agent": UA,
-          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9",
-          "Accept-Language": "en-AU,en;q=0.9",
-        },
-        next: { revalidate: 3600 },
-      };
-    }
-
-    const res = await fetch(fetchUrl, fetchOptions);
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": UA,
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9",
+        "Accept-Language": "en-AU,en;q=0.9",
+      },
+      next: { revalidate: 3600 },
+    });
 
     if (!res.ok) {
-      const reason = res.status === 429
-        ? "REA is blocking server requests. Try manual entry below."
-        : `Could not fetch page (${res.status})`;
       return NextResponse.json(
-        { ok: false, error: reason, status: res.status },
+        { ok: false, error: `Could not fetch page (${res.status})` },
         { status: res.status }
       );
     }
@@ -169,7 +145,7 @@ export async function POST(req: NextRequest) {
     const html = await res.text();
     const property = parsePage(html, url);
 
-    return NextResponse.json({ ok: true, property, via: scrapingBeeKey ? "scrapingbee" : "direct" });
+    return NextResponse.json({ ok: true, property });
   } catch (err) {
     return NextResponse.json(
       { ok: false, error: `Parse failed: ${err instanceof Error ? err.message : String(err)}` },
