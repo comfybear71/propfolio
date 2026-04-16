@@ -105,6 +105,7 @@ propfolio/
 - `RAPIDAPI_KEY` — For realestate.com.au property search
 - `DOMAIN_CLIENT_ID` — Domain.com.au OAuth client ID
 - `DOMAIN_CLIENT_SECRET` — Domain.com.au OAuth client secret
+- `GOOGLE_MAPS_API_KEY` — Google Cloud key (Places API New + Geocoding + Street View Static)
 - `BLOB_READ_WRITE_TOKEN` — Vercel Blob Storage
 
 ### Google OAuth Setup
