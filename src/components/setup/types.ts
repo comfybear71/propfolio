@@ -23,10 +23,13 @@ export interface Person {
 export interface SetupProperty {
   id: string;
   domainPropertyId: string;
+  googlePlaceId: string;
   address: string;
   suburb: string;
   state: string;
   postcode: string;
+  lat: number | null;
+  lng: number | null;
   propertyType: string;
   bedrooms: number | null;
   bathrooms: number | null;
@@ -68,10 +71,13 @@ export function createProperty(): SetupProperty {
   return {
     id: `prop-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     domainPropertyId: "",
+    googlePlaceId: "",
     address: "",
     suburb: "",
     state: "NT",
     postcode: "",
+    lat: null,
+    lng: null,
     propertyType: "House",
     bedrooms: null,
     bathrooms: null,

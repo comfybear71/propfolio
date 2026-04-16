@@ -12,17 +12,11 @@ interface Props {
   onBack: () => void;
 }
 
-interface Suggestion {
-  id: string;
-  address: string;
-  addressComponents: {
-    streetNumber?: string;
-    streetName?: string;
-    streetType?: string;
-    suburb?: string;
-    state?: string;
-    postcode?: string;
-  };
+interface PlacesPrediction {
+  placeId: string;
+  description: string;
+  mainText: string;
+  secondaryText: string;
 }
 
 export default function StepProperties({ properties, people, onUpdate, onNext, onBack }: Props) {
@@ -99,72 +93,105 @@ function PropertyCard({
   canRemove: boolean;
 }) {
   const [query, setQuery] = useState("");
-  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [predictions, setPredictions] = useState<PlacesPrediction[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [loading, setLoading] = useState(false);
   const [apiReturnedValue, setApiReturnedValue] = useState(false);
+  const [streetViewError, setStreetViewError] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
 
+  // Google Places autocomplete
   useEffect(() => {
-    if (query.length < 3) { setSuggestions([]); return; }
+    if (query.length < 3) { setPredictions([]); return; }
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/domain-suggest?terms=${encodeURIComponent(query)}`);
+        const res = await fetch(`/api/places-autocomplete?input=${encodeURIComponent(query)}`);
         const data = await res.json();
-        if (data.ok && data.suggestions) {
-          setSuggestions(data.suggestions);
+        if (data.ok && data.predictions) {
+          setPredictions(data.predictions);
           setShowSuggestions(true);
         }
       } catch { /* ignore */ }
-    }, 300);
+    }, 250);
   }, [query]);
 
-  async function selectAddress(suggestion: Suggestion) {
+  async function selectAddress(prediction: PlacesPrediction) {
     setShowSuggestions(false);
     setLoading(true);
-    const ac = suggestion.addressComponents;
-    const displayAddr = suggestion.address || [ac.streetNumber, ac.streetName, ac.streetType].filter(Boolean).join(" ");
-    setQuery(displayAddr);
+    setStreetViewError(false);
+    setQuery(prediction.description);
 
+    // Save the displayed address immediately
     onUpdate({
-      domainPropertyId: suggestion.id,
-      address: displayAddr,
-      suburb: ac.suburb || "",
-      state: ac.state || "",
-      postcode: ac.postcode || "",
+      googlePlaceId: prediction.placeId,
+      address: prediction.mainText || prediction.description,
     });
 
-    // Fetch full property details
+    // Fetch place details to get lat/lng + structured components
     try {
-      const res = await fetch(`/api/domain-property?id=${suggestion.id}`);
+      const res = await fetch(`/api/places-details?placeId=${encodeURIComponent(prediction.placeId)}`);
       const data = await res.json();
-      if (data.ok && data.property) {
-        const p = data.property;
-        const pe = data.priceEstimate;
+      if (data.ok) {
+        const fullStreet = [data.streetNumber, data.streetName].filter(Boolean).join(" ");
+        const photoUrl = data.lat && data.lng
+          ? `/api/streetview?lat=${data.lat}&lng=${data.lng}&size=800x500`
+          : "";
+
         onUpdate({
-          domainPropertyId: suggestion.id,
-          address: displayAddr,
-          suburb: p.suburb || ac.suburb || "",
-          state: p.state || ac.state || "",
-          postcode: p.postcode || ac.postcode || "",
-          propertyType: p.propertyType || "House",
-          bedrooms: p.bedrooms,
-          bathrooms: p.bathrooms,
-          carSpaces: p.carSpaces,
-          landSize: p.landArea,
-          estimatedValue: pe?.midPrice || 0,
-          valueLow: pe?.lowerPrice || 0,
-          valueHigh: pe?.upperPrice || 0,
-          photos: p.photos || [],
+          googlePlaceId: data.placeId,
+          address: fullStreet || prediction.mainText,
+          suburb: data.suburb || "",
+          state: data.state || "",
+          postcode: data.postcode || "",
+          lat: data.lat,
+          lng: data.lng,
+          photos: photoUrl ? [photoUrl] : [],
         });
-        if (pe?.midPrice) setApiReturnedValue(true);
+
+        // Verify Street View is actually available for this location
+        if (data.lat && data.lng) {
+          try {
+            const svCheck = await fetch(`/api/streetview?lat=${data.lat}&lng=${data.lng}&metadata=1`);
+            const svData = await svCheck.json();
+            if (!svData.available) {
+              setStreetViewError(true);
+              onUpdate({ photos: [] });
+            }
+          } catch { /* assume available */ }
+        }
       }
-    } catch { /* property lookup failed — address still saved */ }
+    } catch { /* place details failed — address still saved */ }
     setLoading(false);
   }
 
-  const hasDetails = property.bedrooms !== null || property.estimatedValue > 0;
+  function clearAddress() {
+    setQuery("");
+    setPredictions([]);
+    setStreetViewError(false);
+    onUpdate({
+      googlePlaceId: "",
+      address: "",
+      suburb: "",
+      state: "",
+      postcode: "",
+      lat: null,
+      lng: null,
+      photos: [],
+    });
+  }
+
+  function uploadPhoto(file: File) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        onUpdate({ photos: [reader.result, ...property.photos.filter(p => !p.startsWith("/api/streetview"))] });
+      }
+    };
+    reader.readAsDataURL(file);
+  }
+
+  const hasDetails = property.estimatedValue > 0;
 
   return (
     <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card)] p-5 space-y-4">
@@ -177,36 +204,40 @@ function PropertyCard({
         )}
       </div>
 
-      {/* Address search */}
+      {/* Address search — Google Places */}
       <div className="relative">
         <input
           type="text"
-          value={property.address || query}
+          value={property.googlePlaceId ? `${property.address}, ${property.suburb} ${property.state} ${property.postcode}` : query}
           onChange={(e) => {
-            setQuery(e.target.value);
-            // Clear the confirmed address so autocomplete can re-trigger
-            if (property.address) onUpdate({ address: "" });
+            const val = e.target.value;
+            setQuery(val);
+            // If user starts typing again, clear the saved address
+            if (property.googlePlaceId) {
+              clearAddress();
+              setQuery(val);
+            }
           }}
           onBlur={() => {
-            // If user typed an address manually without selecting from dropdown, accept it
-            if (!property.address && query.trim().length >= 5) {
+            // If user typed without selecting, accept manual entry
+            if (!property.googlePlaceId && !property.address && query.trim().length >= 5) {
               onUpdate({ address: query.trim() });
             }
-            // Delay hiding suggestions so click can register
             setTimeout(() => setShowSuggestions(false), 200);
           }}
           placeholder="Start typing your address..."
           className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-lg px-4 py-3 text-sm focus:border-[var(--accent)] outline-none"
         />
-        {showSuggestions && suggestions.length > 0 && (
-          <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-[var(--card)] border border-[var(--card-border)] rounded-lg shadow-xl max-h-48 overflow-y-auto">
-            {suggestions.map((s) => (
+        {showSuggestions && predictions.length > 0 && (
+          <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-[var(--card)] border border-[var(--card-border)] rounded-lg shadow-xl max-h-64 overflow-y-auto">
+            {predictions.map((p) => (
               <button
-                key={s.id}
-                onClick={() => selectAddress(s)}
-                className="w-full text-left px-4 py-2.5 text-sm hover:bg-[var(--accent)]/10 transition-colors border-b border-[var(--card-border)] last:border-0"
+                key={p.placeId}
+                onClick={() => selectAddress(p)}
+                className="w-full text-left px-4 py-2.5 hover:bg-[var(--accent)]/10 transition-colors border-b border-[var(--card-border)] last:border-0"
               >
-                {s.address || [s.addressComponents.streetNumber, s.addressComponents.streetName, s.addressComponents.streetType, s.addressComponents.suburb, s.addressComponents.state].filter(Boolean).join(" ")}
+                <div className="text-sm font-medium">{p.mainText}</div>
+                <div className="text-xs text-[var(--muted)]">{p.secondaryText}</div>
               </button>
             ))}
           </div>
@@ -215,20 +246,60 @@ function PropertyCard({
 
       {loading && (
         <div className="text-sm text-[var(--accent)] animate-pulse text-center py-2">
-          Looking up property details...
+          Looking up address...
         </div>
       )}
 
-      {/* Property details from API */}
+      {/* Property photo (Street View or uploaded) + upload control */}
+      {property.address && !loading && (
+        <div className="space-y-2">
+          {property.photos.length > 0 ? (
+            <div className="relative">
+              <img
+                src={property.photos[0]}
+                alt={property.address}
+                className="w-full h-48 object-cover rounded-lg bg-[var(--background)]"
+                onError={() => setStreetViewError(true)}
+              />
+              <label className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-3 py-1.5 rounded cursor-pointer hover:bg-black/90 transition-colors">
+                Upload photo
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) uploadPhoto(f);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+            </div>
+          ) : (
+            <label className="block border-2 border-dashed border-[var(--card-border)] rounded-lg p-6 text-center cursor-pointer hover:border-[var(--accent)] transition-colors">
+              <div className="text-sm text-[var(--muted)]">
+                {streetViewError
+                  ? "No Street View available for this address — upload a photo"
+                  : "Upload a property photo (optional)"}
+              </div>
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) uploadPhoto(f);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          )}
+        </div>
+      )}
+
+      {/* Property details (Google Places gives us nothing about beds/baths/value — all manual) */}
       {hasDetails && !loading && (
         <div className="space-y-3">
-          {property.photos.length > 0 && (
-            <img
-              src={property.photos[0]}
-              alt={property.address}
-              className="w-full h-40 object-cover rounded-lg"
-            />
-          )}
           <div className="grid grid-cols-4 gap-2 text-xs text-center">
             {property.bedrooms !== null && <Chip label={`${property.bedrooms} bed`} />}
             {property.bathrooms !== null && <Chip label={`${property.bathrooms} bath`} />}
