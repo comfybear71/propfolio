@@ -425,22 +425,6 @@ function PropertyCard({
         </div>
       )}
 
-      {/* Manual value entry — always shown when API didn't provide value */}
-      {property.address && !apiReturnedValue && !loading && (
-        <div>
-          <label className="text-xs text-[var(--muted)]">Estimated property value</label>
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted)] text-sm">$</span>
-            <input
-              type="number"
-              value={property.estimatedValue || ""}
-              onChange={(e) => onUpdate({ estimatedValue: parseFloat(e.target.value) || 0 })}
-              placeholder="e.g. 550000"
-              className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded px-3 py-2 text-sm outline-none focus:border-[var(--accent)] pl-7"
-            />
-          </div>
-        </div>
-      )}
 
       {/* Manual fields */}
       {property.address && (

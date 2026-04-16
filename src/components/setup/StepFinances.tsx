@@ -15,6 +15,8 @@ interface Props {
 export default function StepFinances({
   properties, bankBalance, onUpdateProperty, onUpdateBank, onNext, onBack,
 }: Props) {
+  const canProceed = properties.every((p) => p.estimatedValue > 0);
+
   return (
     <div className="space-y-8">
       <div className="text-center space-y-2">
@@ -28,13 +30,14 @@ export default function StepFinances({
         {properties.map((prop, i) => (
           <div key={prop.id} className="rounded-xl border border-[var(--card-border)] bg-[var(--card)] p-5 space-y-4">
             <div className="font-medium text-sm">{prop.address}</div>
-            {prop.estimatedValue > 0 && (
-              <div className="text-xs text-[var(--muted)]">
-                Estimated value: {formatCurrency(prop.estimatedValue)}
-              </div>
-            )}
 
             <div className="grid grid-cols-2 gap-3">
+              <NumberField
+                label="Estimated value"
+                value={prop.estimatedValue}
+                onChange={(v) => onUpdateProperty(i, { estimatedValue: v })}
+                prefix="$"
+              />
               <NumberField
                 label="Loan balance"
                 value={prop.loanBalance}
@@ -85,6 +88,11 @@ export default function StepFinances({
                 </div>
               </div>
             )}
+            {prop.estimatedValue === 0 && (
+              <p className="text-xs text-[var(--negative)]">
+                Enter an estimated value to see equity calculations
+              </p>
+            )}
           </div>
         ))}
 
@@ -109,7 +117,8 @@ export default function StepFinances({
         </button>
         <button
           onClick={onNext}
-          className="px-8 py-3 bg-[var(--accent)] text-white rounded-lg font-medium hover:bg-[var(--accent-hover)] transition-colors"
+          disabled={!canProceed}
+          className="px-8 py-3 bg-[var(--accent)] text-white rounded-lg font-medium hover:bg-[var(--accent-hover)] transition-colors disabled:opacity-40"
         >
           Next
         </button>
