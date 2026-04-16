@@ -712,6 +712,16 @@ function SearchTab({ onResultsLoaded }: { onResultsLoaded: (results: DiscoverPro
 
 /* ─── WATCHLIST TAB ────────────────────────────────────────────── */
 
+interface DeepDetail {
+  description: string;
+  photos: string[];
+  estimatedValueLow: number;
+  estimatedValueHigh: number;
+  saleHistory: { date: string; price: number }[];
+  loading: boolean;
+  error: string | null;
+}
+
 function WatchlistTab({
   watchlist,
   mode,
@@ -724,6 +734,58 @@ function WatchlistTab({
   onRemove: (id: string) => void;
 }) {
   const [showPassed, setShowPassed] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [details, setDetails] = useState<Record<string, DeepDetail>>({});
+
+  async function loadDetails(itemId: string, listingUrl: string) {
+    if (!listingUrl) return;
+    setDetails((prev) => ({ ...prev, [itemId]: { ...emptyDetail(), loading: true } }));
+    try {
+      const res = await fetch("/api/rea-parse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: listingUrl }),
+      });
+      const data = await res.json();
+      if (data.ok && data.property) {
+        const p = data.property;
+        setDetails((prev) => ({
+          ...prev,
+          [itemId]: {
+            description: p.description || "",
+            photos: p.photos || [],
+            estimatedValueLow: p.estimatedValueLow || 0,
+            estimatedValueHigh: p.estimatedValueHigh || 0,
+            saleHistory: p.saleHistory || [],
+            loading: false,
+            error: null,
+          },
+        }));
+      } else {
+        setDetails((prev) => ({
+          ...prev,
+          [itemId]: { ...emptyDetail(), loading: false, error: data.error || "Could not load details" },
+        }));
+      }
+    } catch (err) {
+      setDetails((prev) => ({
+        ...prev,
+        [itemId]: { ...emptyDetail(), loading: false, error: String(err) },
+      }));
+    }
+  }
+
+  function toggleExpand(itemId: string, listingUrl: string) {
+    if (expanded === itemId) {
+      setExpanded(null);
+    } else {
+      setExpanded(itemId);
+      // Lazy fetch — only on first expand
+      if (!details[itemId] && listingUrl) {
+        loadDetails(itemId, listingUrl);
+      }
+    }
+  }
 
   const liked = watchlist.filter((w) => w.status === "liked");
   const passed = watchlist.filter((w) => w.status === "passed");
@@ -738,8 +800,14 @@ function WatchlistTab({
     const numPayments = 30 * 12;
     const monthlyRepayment = loanAmount * (monthlyRate * Math.pow(1 + monthlyRate, numPayments)) / (Math.pow(1 + monthlyRate, numPayments) - 1);
     const weeklyCashFlow = p.estimatedWeeklyRent - (monthlyRepayment * 12) / 52;
+    const annualRent = p.estimatedWeeklyRent * 52;
+    const annualExpenses = annualRent * 0.25; // ~25% of rent for management, rates, insurance, maintenance
+    const netYield = totalPrice > 0 ? ((annualRent - annualExpenses) / totalPrice) * 100 : 0;
     const buildBonus = p.state === "NT" ? 30000 : 0;
     const stampDuty = isLandBuild ? calcStampDutyNT(p.landPrice || 0) : calcStampDutyNT(totalPrice);
+
+    const isExpanded = expanded === item.id;
+    const detail = details[item.id];
 
     return (
       <div key={item.id} className="bg-[var(--card)] border border-[var(--border)] rounded-xl overflow-hidden">
@@ -780,6 +848,99 @@ function WatchlistTab({
             )}
           </div>
         </a>
+
+        {/* Expanded deep details — fetched on demand */}
+        {isExpanded && (
+          <div className="border-t border-[var(--border)] p-3 space-y-3 bg-[var(--background)]">
+            {detail?.loading && (
+              <div className="text-xs text-[var(--accent)] animate-pulse text-center py-3">
+                Fetching detailed data from realestate.com.au...
+              </div>
+            )}
+            {detail?.error && (
+              <div className="text-xs text-[var(--negative)] bg-[var(--negative)]/10 p-2 rounded">
+                {detail.error}
+              </div>
+            )}
+            {detail && !detail.loading && !detail.error && (
+              <>
+                {/* Photos gallery */}
+                {detail.photos.length > 0 && (
+                  <div className="flex gap-1 overflow-x-auto pb-1">
+                    {detail.photos.slice(0, 6).map((url, i) => (
+                      <img
+                        key={i}
+                        src={url}
+                        alt=""
+                        className="h-16 w-24 object-cover rounded flex-shrink-0"
+                      />
+                    ))}
+                  </div>
+                )}
+
+                {/* Investment financials */}
+                {mode === "investment" && (
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <Stat label="Gross Yield" value={`${grossYield.toFixed(1)}%`} />
+                    <Stat label="Net Yield (est.)" value={`${netYield.toFixed(1)}%`} />
+                    <Stat label="Weekly Repayment" value={formatCurrency((monthlyRepayment * 12) / 52)} />
+                    <Stat
+                      label="Weekly Cash Flow"
+                      value={`${weeklyCashFlow >= 0 ? "+" : ""}${formatCurrency(weeklyCashFlow)}`}
+                      positive={weeklyCashFlow >= 0}
+                    />
+                    {detail.estimatedValueLow > 0 && (
+                      <>
+                        <Stat label="REA Est. Low" value={formatCurrency(detail.estimatedValueLow)} />
+                        <Stat label="REA Est. High" value={formatCurrency(detail.estimatedValueHigh)} />
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {/* Sale history */}
+                {detail.saleHistory.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold mb-1">Sale History</p>
+                    <div className="space-y-0.5">
+                      {detail.saleHistory.slice(0, 4).map((h, i) => (
+                        <div key={i} className="flex justify-between text-xs text-[var(--muted)]">
+                          <span>{h.date}</span>
+                          <span>{formatCurrency(h.price)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Description */}
+                {detail.description && (
+                  <div>
+                    <p className="text-xs font-semibold mb-1">Description</p>
+                    <p className="text-xs text-[var(--muted)] leading-relaxed">
+                      {detail.description.slice(0, 400)}
+                      {detail.description.length > 400 && "..."}
+                    </p>
+                  </div>
+                )}
+
+                {/* Build context for NT */}
+                {p.state === "NT" && (
+                  <div className="text-xs text-[var(--muted)] bg-[var(--card)] p-2 rounded space-y-0.5">
+                    <p>Stamp duty estimate: {formatCurrency(stampDuty)}</p>
+                    {buildBonus > 0 && <p className="text-[#22c55e]">NT BuildBonus: -{formatCurrency(buildBonus)}</p>}
+                  </div>
+                )}
+              </>
+            )}
+            {!detail && !p.listingUrl && (
+              <p className="text-xs text-[var(--muted)] text-center py-3">
+                No listing URL — can&apos;t fetch deep data for this property
+              </p>
+            )}
+          </div>
+        )}
+
         <div className="border-t border-[var(--border)] px-3 py-1.5 flex items-center justify-between">
           <div className="flex gap-3">
             {item.status === "liked" ? (
@@ -795,6 +956,12 @@ function WatchlistTab({
               Remove
             </button>
           </div>
+          <button
+            onClick={() => toggleExpand(item.id, p.listingUrl || "")}
+            className="text-[11px] text-[#3b82f6] font-medium"
+          >
+            {isExpanded ? "Hide details" : "Show details"}
+          </button>
         </div>
       </div>
     );
@@ -839,6 +1006,29 @@ function Row({ label, value, positive, negative }: { label: string; value: strin
     <div className="flex justify-between">
       <span className="text-[var(--muted)]">{label}</span>
       <span className={positive ? "text-[#22c55e]" : negative ? "text-[#ef4444]" : ""}>{value}</span>
+    </div>
+  );
+}
+
+function emptyDetail(): DeepDetail {
+  return {
+    description: "",
+    photos: [],
+    estimatedValueLow: 0,
+    estimatedValueHigh: 0,
+    saleHistory: [],
+    loading: false,
+    error: null,
+  };
+}
+
+function Stat({ label, value, positive }: { label: string; value: string; positive?: boolean }) {
+  return (
+    <div className="bg-[var(--card)] rounded p-2">
+      <div className="text-[10px] text-[var(--muted)]">{label}</div>
+      <div className={`text-xs font-semibold ${positive === true ? "text-[#22c55e]" : positive === false ? "text-[#ef4444]" : ""}`}>
+        {value}
+      </div>
     </div>
   );
 }
