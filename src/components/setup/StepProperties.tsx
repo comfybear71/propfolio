@@ -130,8 +130,13 @@ function PropertyCard({
         if (p.carSpaces && !property.carSpaces) partial.carSpaces = p.carSpaces;
         if (p.landSize && !property.landSize) partial.landSize = p.landSize;
         if (p.propertyType && !property.propertyType) partial.propertyType = p.propertyType;
-        // Estimated value from REA's own range (if available)
-        if (p.estimatedValueHigh && !property.estimatedValue) {
+        // Estimated value — prefer mid value, fall back to range avg, then listing price
+        if (p.estimatedValue && !property.estimatedValue) {
+          partial.estimatedValue = p.estimatedValue;
+          partial.valueLow = p.estimatedValueLow || 0;
+          partial.valueHigh = p.estimatedValueHigh || 0;
+          setApiReturnedValue(true);
+        } else if (p.estimatedValueHigh && !property.estimatedValue) {
           partial.estimatedValue = Math.round((p.estimatedValueLow + p.estimatedValueHigh) / 2);
           partial.valueLow = p.estimatedValueLow;
           partial.valueHigh = p.estimatedValueHigh;
@@ -139,6 +144,10 @@ function PropertyCard({
         } else if (p.price && !property.estimatedValue) {
           partial.estimatedValue = p.price;
           setApiReturnedValue(true);
+        }
+        // Auto-fill weekly rent (only if Investment property and not already entered)
+        if (p.weeklyRent && property.type === "Investment" && !property.weeklyRent) {
+          partial.weeklyRent = p.weeklyRent;
         }
         // Prefer REA photos if available (they're better than Street View)
         if (p.photos.length > 0) {
