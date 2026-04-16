@@ -2,11 +2,6 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
-  properties as defaultProperties,
-  loans as defaultLoans,
-  incomes as defaultIncomes,
-  defaultExpenses,
-  defaultAssets,
   type Property,
   type Loan,
   type Income,
@@ -17,13 +12,13 @@ import {
 } from "./data";
 
 export function useProperties() {
-  const [data, setData] = useState<Property[]>(defaultProperties);
+  const [data, setData] = useState<Property[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     fetch("/api/properties")
       .then((r) => r.json())
-      .then((d) => { if (d.length > 0) setData(d); setLoaded(true); })
+      .then((d) => { setData(Array.isArray(d) ? d : []); setLoaded(true); })
       .catch(() => setLoaded(true));
   }, []);
 
@@ -46,13 +41,13 @@ export function useProperties() {
 }
 
 export function useLoans() {
-  const [data, setData] = useState<Loan[]>(defaultLoans);
+  const [data, setData] = useState<Loan[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     fetch("/api/loans")
       .then((r) => r.json())
-      .then((d) => { if (d.length > 0) setData(d); setLoaded(true); })
+      .then((d) => { setData(Array.isArray(d) ? d : []); setLoaded(true); })
       .catch(() => setLoaded(true));
   }, []);
 
@@ -75,13 +70,13 @@ export function useLoans() {
 }
 
 export function useIncomes() {
-  const [data, setData] = useState<Income[]>(defaultIncomes);
+  const [data, setData] = useState<Income[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     fetch("/api/incomes")
       .then((r) => r.json())
-      .then((d) => { if (d.length > 0) setData(d); setLoaded(true); })
+      .then((d) => { setData(Array.isArray(d) ? d : []); setLoaded(true); })
       .catch(() => setLoaded(true));
   }, []);
 
@@ -104,13 +99,13 @@ export function useIncomes() {
 }
 
 export function useExpenses() {
-  const [data, setData] = useState<Expense[]>(defaultExpenses);
+  const [data, setData] = useState<Expense[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     fetch("/api/expenses")
       .then((r) => r.json())
-      .then((d) => { if (d.length > 0) setData(d); setLoaded(true); })
+      .then((d) => { setData(Array.isArray(d) ? d : []); setLoaded(true); })
       .catch(() => setLoaded(true));
   }, []);
 
@@ -129,13 +124,13 @@ export function useExpenses() {
 }
 
 export function useAssets() {
-  const [data, setData] = useState<Asset[]>(defaultAssets);
+  const [data, setData] = useState<Asset[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     fetch("/api/assets")
       .then((r) => r.json())
-      .then((d) => { if (d.length > 0) setData(d); setLoaded(true); })
+      .then((d) => { setData(Array.isArray(d) ? d : []); setLoaded(true); })
       .catch(() => setLoaded(true));
   }, []);
 
