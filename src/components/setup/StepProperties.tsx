@@ -98,7 +98,61 @@ function PropertyCard({
   const [loading, setLoading] = useState(false);
   const [apiReturnedValue, setApiReturnedValue] = useState(false);
   const [streetViewError, setStreetViewError] = useState(false);
+  const [reaUrl, setReaUrl] = useState("");
+  const [reaLoading, setReaLoading] = useState(false);
+  const [reaError, setReaError] = useState<string | null>(null);
+  const [showReaPaste, setShowReaPaste] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
+
+  async function fetchFromREA() {
+    if (!reaUrl.trim()) return;
+    setReaLoading(true);
+    setReaError(null);
+    try {
+      const res = await fetch("/api/rea-parse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: reaUrl.trim() }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        setReaError(data.error || "Failed to fetch REA listing");
+      } else {
+        const p = data.property;
+        // Merge — only fill blanks, don't overwrite what user already entered
+        const partial: Partial<SetupProperty> = {};
+        if (p.address && !property.address) partial.address = p.address;
+        if (p.suburb && !property.suburb) partial.suburb = p.suburb;
+        if (p.state && !property.state) partial.state = p.state;
+        if (p.postcode && !property.postcode) partial.postcode = p.postcode;
+        if (p.bedrooms && !property.bedrooms) partial.bedrooms = p.bedrooms;
+        if (p.bathrooms && !property.bathrooms) partial.bathrooms = p.bathrooms;
+        if (p.carSpaces && !property.carSpaces) partial.carSpaces = p.carSpaces;
+        if (p.landSize && !property.landSize) partial.landSize = p.landSize;
+        if (p.propertyType && !property.propertyType) partial.propertyType = p.propertyType;
+        // Estimated value from REA's own range (if available)
+        if (p.estimatedValueHigh && !property.estimatedValue) {
+          partial.estimatedValue = Math.round((p.estimatedValueLow + p.estimatedValueHigh) / 2);
+          partial.valueLow = p.estimatedValueLow;
+          partial.valueHigh = p.estimatedValueHigh;
+          setApiReturnedValue(true);
+        } else if (p.price && !property.estimatedValue) {
+          partial.estimatedValue = p.price;
+          setApiReturnedValue(true);
+        }
+        // Prefer REA photos if available (they're better than Street View)
+        if (p.photos.length > 0) {
+          partial.photos = p.photos.slice(0, 5);
+        }
+        onUpdate(partial);
+        setReaUrl("");
+        setShowReaPaste(false);
+      }
+    } catch (err) {
+      setReaError("Network error: " + String(err));
+    }
+    setReaLoading(false);
+  }
 
   // Google Places autocomplete
   useEffect(() => {
@@ -243,6 +297,56 @@ function PropertyCard({
           </div>
         )}
       </div>
+
+      {/* REA URL paste — optional accordion */}
+      {property.address && (
+        <div>
+          {!showReaPaste ? (
+            <button
+              onClick={() => setShowReaPaste(true)}
+              className="text-xs text-[var(--accent)] hover:underline"
+            >
+              + Got a realestate.com.au URL? Paste it for richer details
+            </button>
+          ) : (
+            <div className="space-y-2 bg-[var(--background)] border border-[var(--card-border)] rounded-lg p-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs text-[var(--muted)]">
+                  Paste realestate.com.au property URL
+                </label>
+                <button
+                  onClick={() => { setShowReaPaste(false); setReaUrl(""); setReaError(null); }}
+                  className="text-xs text-[var(--muted)] hover:text-white"
+                >
+                  cancel
+                </button>
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="url"
+                  value={reaUrl}
+                  onChange={(e) => setReaUrl(e.target.value)}
+                  placeholder="https://www.realestate.com.au/property-..."
+                  className="flex-1 bg-[var(--card)] border border-[var(--card-border)] rounded px-3 py-2 text-sm focus:border-[var(--accent)] outline-none"
+                />
+                <button
+                  onClick={fetchFromREA}
+                  disabled={reaLoading || !reaUrl.trim()}
+                  className="px-3 py-2 bg-[var(--accent)] text-white rounded text-sm font-medium hover:bg-[var(--accent-hover)] transition-colors disabled:opacity-40"
+                >
+                  {reaLoading ? "..." : "Fetch"}
+                </button>
+              </div>
+              <p className="text-xs text-[var(--muted)]">
+                Find your property on realestate.com.au and copy the URL. We&apos;ll fill in beds, baths, value, and photos.
+              </p>
+              {reaError && (
+                <p className="text-xs text-[var(--negative)]">{reaError}</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {loading && (
         <div className="text-sm text-[var(--accent)] animate-pulse text-center py-2">
