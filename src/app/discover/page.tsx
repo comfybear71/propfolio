@@ -5,6 +5,7 @@ import { formatCurrency, type DiscoverProperty } from "@/lib/data";
 import { useWatchlist } from "@/lib/useData";
 
 type Tab = "search" | "swipe" | "watchlist";
+type DiscoverMode = "home" | "investment";
 
 export default function DiscoverPage() {
   const { watchlist, addToWatchlist, updateStatus, removeFromWatchlist, loaded: wLoaded } = useWatchlist();
@@ -15,6 +16,50 @@ export default function DiscoverPage() {
   const [nextPage, setNextPage] = useState(2);
   const [loadingMore, setLoadingMore] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("search");
+  const [mode, setMode] = useState<DiscoverMode>("investment");
+
+  // Enrich a batch of properties with median rent for yield calculation (Investment mode only)
+  const enrichWithRent = useCallback(async (properties: DiscoverProperty[]): Promise<DiscoverProperty[]> => {
+    if (mode !== "investment") return properties;
+    // Group by suburb + bedrooms to minimise API calls
+    const groups = new Map<string, DiscoverProperty[]>();
+    for (const p of properties) {
+      if (!p.suburb || p.estimatedWeeklyRent > 0) continue;
+      const key = `${p.suburb}|${p.state}|${p.postcode}|${p.bedrooms ?? "any"}|${p.propertyType || "house"}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(p);
+    }
+
+    // Fetch median rent for each group in parallel
+    const results = await Promise.all(
+      Array.from(groups.entries()).map(async ([key, group]) => {
+        const [suburb, state, postcode, bedrooms, propertyType] = key.split("|");
+        try {
+          const params = new URLSearchParams({ suburb, state, postcode });
+          if (bedrooms !== "any") params.set("bedrooms", bedrooms);
+          params.set("propertyType", propertyType.toLowerCase());
+          const res = await fetch(`/api/rental-median?${params.toString()}`);
+          const data = await res.json();
+          if (data.ok && data.median > 0) {
+            group.forEach((p) => { p.estimatedWeeklyRent = data.median; });
+          }
+        } catch { /* silent fail — yield just won't show */ }
+        return group;
+      })
+    );
+
+    // Reconstruct original order
+    const rentMap = new Map<string, number>();
+    for (const group of results) {
+      for (const p of group) {
+        rentMap.set(p.id, p.estimatedWeeklyRent);
+      }
+    }
+    return properties.map((p) => ({
+      ...p,
+      estimatedWeeklyRent: rentMap.get(p.id) ?? p.estimatedWeeklyRent,
+    }));
+  }, [mode]);
 
   const loadMoreResults = useCallback(async () => {
     if (!lastFilters || loadingMore) return;
@@ -27,12 +72,21 @@ export default function DiscoverPage() {
       });
       const data = await res.json();
       if (data.ok && data.results?.length > 0) {
-        setSearchResults((prev) => [...prev, ...data.results]);
+        const enriched = await enrichWithRent(data.results);
+        setSearchResults((prev) => [...prev, ...enriched]);
         setNextPage((p) => p + 1);
       }
     } catch { /* silently fail */ }
     setLoadingMore(false);
-  }, [lastFilters, nextPage, loadingMore]);
+  }, [lastFilters, nextPage, loadingMore, enrichWithRent]);
+
+  // Re-enrich when mode changes to Investment (for existing cards)
+  useEffect(() => {
+    if (mode === "investment" && searchResults.length > 0) {
+      enrichWithRent(searchResults).then(setSearchResults);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
 
   if (!wLoaded) return <div className="text-center text-[var(--muted)] py-20">Loading...</div>;
 
@@ -46,6 +100,31 @@ export default function DiscoverPage() {
   return (
     <div className="space-y-3 max-w-4xl mx-auto">
       <h1 className="text-lg font-bold tracking-wide"><span className="text-[#3b82f6]">PROPFOLIO</span> <span className="text-[var(--muted)] font-normal">— DISCOVERY</span></h1>
+
+      {/* Mode toggle — Investment or Home */}
+      <div className="flex gap-0.5 bg-[var(--card)] rounded-lg p-0.5 border border-[var(--border)]">
+        <button
+          onClick={() => setMode("investment")}
+          className={`flex-1 py-2 px-2 rounded-md text-xs font-medium transition-colors ${
+            mode === "investment"
+              ? "bg-[#22c55e] text-white"
+              : "text-[var(--muted)] hover:text-white"
+          }`}
+        >
+          Investment — Show Yield
+        </button>
+        <button
+          onClick={() => setMode("home")}
+          className={`flex-1 py-2 px-2 rounded-md text-xs font-medium transition-colors ${
+            mode === "home"
+              ? "bg-[#3b82f6] text-white"
+              : "text-[var(--muted)] hover:text-white"
+          }`}
+        >
+          Home — For Living In
+        </button>
+      </div>
+
       {/* Tab bar */}
       <div className="flex gap-0.5 bg-[var(--card)] rounded-lg p-0.5 border border-[var(--border)]">
         {tabs.map((t) => (
@@ -65,17 +144,19 @@ export default function DiscoverPage() {
 
       {activeTab === "search" && (
         <SearchTab
-          onResultsLoaded={(results, filters) => {
-            setSearchResults(results);
+          onResultsLoaded={async (results, filters) => {
             setLastFilters(filters);
             setNextPage(2);
             setActiveTab("swipe");
+            const enriched = await enrichWithRent(results);
+            setSearchResults(enriched);
           }}
         />
       )}
       {activeTab === "swipe" && (
         <SwipeTab
           properties={searchResults}
+          mode={mode}
           onLike={(p) => addToWatchlist(p, "liked")}
           onNeedMore={loadMoreResults}
           loadingMore={loadingMore}
@@ -84,6 +165,7 @@ export default function DiscoverPage() {
       {activeTab === "watchlist" && (
         <WatchlistTab
           watchlist={watchlist}
+          mode={mode}
           onUpdateStatus={updateStatus}
           onRemove={removeFromWatchlist}
         />
@@ -96,11 +178,13 @@ export default function DiscoverPage() {
 
 function SwipeTab({
   properties,
+  mode,
   onLike,
   onNeedMore,
   loadingMore,
 }: {
   properties: DiscoverProperty[];
+  mode: DiscoverMode;
   onLike: (p: DiscoverProperty) => void;
   onNeedMore?: () => void;
   loadingMore?: boolean;
@@ -377,14 +461,22 @@ function SwipeTab({
               ) : (
                 <p className="text-sm font-bold text-[#3b82f6] truncate">{displayPriceText || "Contact Agent"}</p>
               )}
-              {grossYield > 0 && (
+              {mode === "investment" && grossYield > 0 && (
                 <span
                   className={`text-sm font-bold whitespace-nowrap ${grossYield >= 7 ? "text-[#22c55e]" : grossYield >= 5 ? "text-yellow-400" : "text-[#ef4444]"}`}
                 >
                   {grossYield.toFixed(1)}% yield
                 </span>
               )}
+              {mode === "investment" && grossYield === 0 && (
+                <span className="text-xs text-[var(--muted)]">Rent data TBC</span>
+              )}
             </div>
+            {mode === "investment" && current.estimatedWeeklyRent > 0 && (
+              <p className="text-xs text-[var(--muted)]">
+                Est. rent {formatCurrency(current.estimatedWeeklyRent)}/wk (suburb avg) · {formatCurrency(current.estimatedWeeklyRent * 52)}/yr
+              </p>
+            )}
             {isLandBuild && (
               <p className="text-xs text-[var(--muted)]">
                 Land {formatCurrency(current.landPrice || 0)} + Build {formatCurrency(current.buildCost || 0)}
@@ -495,7 +587,7 @@ function SwipeTab({
 
 /* ─── SEARCH API TAB ───────────────────────────────────────────── */
 
-function SearchTab({ onResultsLoaded }: { onResultsLoaded: (results: DiscoverProperty[], filters: Record<string, unknown>, apiSource: "rapidapi" | "domain") => void }) {
+function SearchTab({ onResultsLoaded }: { onResultsLoaded: (results: DiscoverProperty[], filters: Record<string, unknown>, apiSource: "rapidapi" | "domain") => void | Promise<void> }) {
   const [filters, setFilters] = useState({
     state: "NT",
     suburb: "",
@@ -622,10 +714,12 @@ function SearchTab({ onResultsLoaded }: { onResultsLoaded: (results: DiscoverPro
 
 function WatchlistTab({
   watchlist,
+  mode,
   onUpdateStatus,
   onRemove,
 }: {
   watchlist: { id: string; propertyId: string; property: DiscoverProperty; status: string; notes: string; createdAt: string }[];
+  mode: DiscoverMode;
   onUpdateStatus: (id: string, status: "liked" | "passed") => void;
   onRemove: (id: string) => void;
 }) {
@@ -667,7 +761,7 @@ function WatchlistTab({
                 <p className="font-medium text-sm truncate">{p.address || p.suburb}</p>
                 <p className="text-[11px] text-[var(--muted)]">{p.suburb}, {p.state} {p.postcode}</p>
               </div>
-              {grossYield > 0 && (
+              {mode === "investment" && grossYield > 0 && (
                 <span className={`text-xs font-bold whitespace-nowrap ${grossYield >= 7 ? "text-[#22c55e]" : grossYield >= 5 ? "text-yellow-400" : "text-[#ef4444]"}`}>
                   {grossYield.toFixed(1)}%
                 </span>
