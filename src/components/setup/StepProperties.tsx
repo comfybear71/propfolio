@@ -85,61 +85,6 @@ function PropertyCard({
   onRemove: () => void;
   canRemove: boolean;
 }) {
-  const [reaUrl, setReaUrl] = useState("");
-  const [reaLoading, setReaLoading] = useState(false);
-  const [reaError, setReaError] = useState<string | null>(null);
-  const [reaSuccess, setReaSuccess] = useState(false);
-
-  async function fetchFromREA() {
-    if (!reaUrl.trim()) return;
-    setReaLoading(true);
-    setReaError(null);
-    setReaSuccess(false);
-    try {
-      const res = await fetch("/api/rea-parse", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: reaUrl.trim() }),
-      });
-      const data = await res.json();
-      if (!data.ok) {
-        setReaError(data.error || "Failed to fetch REA page");
-      } else {
-        const p = data.property;
-        const partial: Partial<SetupProperty> = {};
-        if (p.address && !property.address) partial.address = p.address;
-        if (p.suburb) partial.suburb = p.suburb;
-        if (p.state) partial.state = p.state;
-        if (p.postcode) partial.postcode = p.postcode;
-        if (p.bedrooms) partial.bedrooms = p.bedrooms;
-        if (p.bathrooms) partial.bathrooms = p.bathrooms;
-        if (p.carSpaces) partial.carSpaces = p.carSpaces;
-        if (p.landSize) partial.landSize = p.landSize;
-        if (p.propertyType) partial.propertyType = p.propertyType;
-
-        if (p.estimatedValue) {
-          partial.estimatedValue = p.estimatedValue;
-          partial.valueLow = p.estimatedValueLow || 0;
-          partial.valueHigh = p.estimatedValueHigh || 0;
-        } else if (p.price) {
-          partial.estimatedValue = p.price;
-        }
-        if (p.weeklyRent && property.type === "Investment") {
-          partial.weeklyRent = p.weeklyRent;
-        }
-        if (p.photos.length > 0) {
-          partial.photos = p.photos.slice(0, 5);
-        }
-
-        onUpdate(partial);
-        setReaSuccess(true);
-      }
-    } catch (err) {
-      setReaError("Network error: " + String(err));
-    }
-    setReaLoading(false);
-  }
-
   function uploadPhoto(file: File) {
     const reader = new FileReader();
     reader.onload = () => {
@@ -205,35 +150,9 @@ function PropertyCard({
         </div>
       </div>
 
-      {/* REA URL paste (auto-fetch via ScrapingBee) */}
+      {/* REA screenshot OCR — user is signed in to REA, takes screenshot, we extract */}
       {property.address && (
-        <div className="space-y-2 bg-[var(--background)] border border-[var(--card-border)] rounded-lg p-3">
-          <label className="text-xs text-[var(--muted)]">
-            Got a realestate.com.au URL? (auto-fills value, photos, details)
-          </label>
-          <div className="flex gap-2">
-            <input
-              type="url"
-              value={reaUrl}
-              onChange={(e) => setReaUrl(e.target.value)}
-              placeholder="https://www.realestate.com.au/property/..."
-              className="flex-1 bg-[var(--card)] border border-[var(--card-border)] rounded px-3 py-2 text-sm focus:border-[var(--accent)] outline-none"
-            />
-            <button
-              onClick={fetchFromREA}
-              disabled={reaLoading || !reaUrl.trim()}
-              className="px-4 py-2 bg-[var(--accent)] text-white rounded text-sm font-medium hover:bg-[var(--accent-hover)] transition-colors disabled:opacity-40"
-            >
-              {reaLoading ? "..." : "Fetch"}
-            </button>
-          </div>
-          {reaError && (
-            <p className="text-xs text-[var(--negative)]">{reaError}</p>
-          )}
-          {reaSuccess && (
-            <p className="text-xs text-[var(--positive)]">Data loaded from REA</p>
-          )}
-        </div>
+        <ReaScreenshotUpload property={property} onUpdate={onUpdate} />
       )}
 
       {/* Photo */}
@@ -404,6 +323,90 @@ function PropertyCard({
 
 function Chip({ label }: { label: string }) {
   return <span className="bg-[var(--card-border)] rounded px-2 py-1">{label}</span>;
+}
+
+function ReaScreenshotUpload({
+  property, onUpdate,
+}: {
+  property: SetupProperty;
+  onUpdate: (partial: Partial<SetupProperty>) => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+
+  async function handleUpload(file: File) {
+    setLoading(true);
+    setError(null);
+    setSuccess(false);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/ocr-rea-screenshot", { method: "POST", body: form });
+      const data = await res.json();
+
+      if (!data.ok || !data.data) {
+        setError(data.error || "Could not read screenshot");
+      } else {
+        const d = data.data;
+        const partial: Partial<SetupProperty> = {};
+        if (d.address && !property.address) partial.address = d.address;
+        if (d.suburb && !property.suburb) partial.suburb = d.suburb;
+        if (d.state && !property.state) partial.state = d.state;
+        if (d.postcode && !property.postcode) partial.postcode = d.postcode;
+        if (d.bedrooms) partial.bedrooms = d.bedrooms;
+        if (d.bathrooms) partial.bathrooms = d.bathrooms;
+        if (d.carSpaces) partial.carSpaces = d.carSpaces;
+        if (d.landSize) partial.landSize = d.landSize;
+        if (d.propertyType) partial.propertyType = d.propertyType;
+        if (d.estimatedValue) partial.estimatedValue = d.estimatedValue;
+        if (d.estimatedValueLow) partial.valueLow = d.estimatedValueLow;
+        if (d.estimatedValueHigh) partial.valueHigh = d.estimatedValueHigh;
+        if (d.weeklyRent && property.type === "Investment") partial.weeklyRent = d.weeklyRent;
+        onUpdate(partial);
+        setSuccess(true);
+      }
+    } catch (err) {
+      setError("Upload failed: " + String(err));
+    }
+    setLoading(false);
+  }
+
+  return (
+    <div className="space-y-2 bg-[var(--background)] border border-[var(--card-border)] rounded-lg p-3">
+      <label className="text-xs text-[var(--muted)] block">
+        Upload REA screenshot for auto-fill
+      </label>
+      <p className="text-xs text-[var(--muted)]">
+        Open your property on realestate.com.au (signed in to see the valuation).
+        Take a screenshot of the price/rent estimate section and upload it here.
+        We&apos;ll read all the values automatically.
+      </p>
+
+      <label className="block border-2 border-dashed border-[var(--card-border)] rounded-lg p-4 text-center cursor-pointer hover:border-[var(--accent)] transition-colors">
+        {loading ? (
+          <span className="text-sm text-[var(--accent)] animate-pulse">Reading screenshot...</span>
+        ) : (
+          <span className="text-sm text-[var(--muted)]">Tap to upload screenshot</span>
+        )}
+        <input
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          disabled={loading}
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) handleUpload(f);
+            e.target.value = "";
+          }}
+        />
+      </label>
+
+      {error && <p className="text-xs text-[var(--negative)]">{error}</p>}
+      {success && <p className="text-xs text-[var(--positive)]">Data extracted from screenshot</p>}
+    </div>
+  );
 }
 
 function ManualField({
