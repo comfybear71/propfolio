@@ -32,6 +32,17 @@ export default function SetupPage() {
     setState((s) => ({ ...s, people }));
   }
 
+  function updatePersonById(id: string, update: Partial<Person>) {
+    setState((s) => ({
+      ...s,
+      people: s.people.map((p) => (p.id === id ? { ...p, ...update } : p)),
+    }));
+  }
+
+  function addPerson(person: Person) {
+    setState((s) => ({ ...s, people: [...s.people, person] }));
+  }
+
   function setProperties(properties: SetupProperty[]) {
     setState((s) => ({ ...s, properties }));
   }
@@ -75,7 +86,7 @@ export default function SetupPage() {
       // Save properties
       for (const prop of state.properties) {
         if (!prop.address) continue;
-        const propId = prop.address.toLowerCase().replace(/[^a-z0-9]/g, "-").slice(0, 30);
+        const propId = prop.id || `prop-${prop.address.toLowerCase().replace(/[^a-z0-9]/g, "-").slice(0, 20)}-${Date.now()}`;
         await fetch("/api/properties", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -182,6 +193,8 @@ export default function SetupPage() {
           <StepWelcome
             people={state.people}
             onUpdate={setPeople}
+            onAddPerson={addPerson}
+            onUpdatePerson={updatePersonById}
             onNext={() => setStep(2)}
           />
         )}
