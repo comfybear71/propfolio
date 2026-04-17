@@ -34,7 +34,7 @@ export default function StepProperties({ properties, people, onUpdate, onNext, o
       <div className="text-center space-y-2">
         <h2 className="text-2xl font-bold">Your Properties</h2>
         <p className="text-[var(--muted)]">
-          Type your address, then paste your realestate.com.au URL for details
+          Upload up to 3 property documents to auto-fill the address and value, or type them in manually.
         </p>
       </div>
 
@@ -106,7 +106,10 @@ function PropertyCard({
         )}
       </div>
 
-      {/* Simple address input */}
+      {/* OCR: upload up to 3 property docs to auto-fill address + value */}
+      <PropertyDocsUpload property={property} onUpdate={onUpdate} />
+
+      {/* Address fields */}
       <div>
         <label className="text-xs text-[var(--muted)] mb-1 block">Street address</label>
         <input
@@ -150,12 +153,25 @@ function PropertyCard({
         </div>
       </div>
 
-      {/* REA screenshot OCR — user is signed in to REA, takes screenshot, we extract */}
-      {property.address && (
-        <ReaScreenshotUpload property={property} onUpdate={onUpdate} />
-      )}
+      {/* Estimated value */}
+      <div>
+        <label className="text-xs text-[var(--muted)] mb-1 block">Estimated value (AUD)</label>
+        <div className="relative">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted)] text-sm">$</span>
+          <input
+            type="number"
+            value={property.estimatedValue || ""}
+            onChange={(e) => onUpdate({ estimatedValue: parseFloat(e.target.value) || 0 })}
+            placeholder="628000"
+            className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-lg pl-7 pr-3 py-2 text-sm focus:border-[var(--accent)] outline-none"
+          />
+        </div>
+        {property.estimatedValue > 0 && (
+          <div className="text-xs text-[var(--positive)] mt-1">{formatCurrency(property.estimatedValue)}</div>
+        )}
+      </div>
 
-      {/* Photo */}
+      {/* Property photo (optional) — user can upload home photos here later */}
       {property.address && (
         <div>
           {property.photos.length > 0 ? (
@@ -197,98 +213,6 @@ function PropertyCard({
         </div>
       )}
 
-      {/* Manual paste fields — always available fallback */}
-      {property.address && (
-        <details className="bg-[var(--background)] border border-[var(--card-border)] rounded-lg">
-          <summary className="px-3 py-2 text-xs text-[var(--muted)] cursor-pointer hover:text-white">
-            Or paste values manually from REA (if auto-fetch didn&apos;t work)
-          </summary>
-          <div className="px-3 pb-3 pt-1 space-y-2">
-            <p className="text-xs text-[var(--muted)]">
-              Open realestate.com.au, find your property, copy these values.
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              <ManualField
-                label="Estimated value"
-                value={property.estimatedValue}
-                onChange={(v) => onUpdate({ estimatedValue: v })}
-                prefix="$"
-                placeholder="628000"
-              />
-              <ManualField
-                label="Weekly rent"
-                value={property.weeklyRent}
-                onChange={(v) => onUpdate({ weeklyRent: v })}
-                prefix="$"
-                suffix="/wk"
-                placeholder="665"
-              />
-              <ManualField
-                label="Low range"
-                value={property.valueLow}
-                onChange={(v) => onUpdate({ valueLow: v })}
-                prefix="$"
-                placeholder="560000"
-              />
-              <ManualField
-                label="High range"
-                value={property.valueHigh}
-                onChange={(v) => onUpdate({ valueHigh: v })}
-                prefix="$"
-                placeholder="700000"
-              />
-              <ManualIntField
-                label="Bedrooms"
-                value={property.bedrooms}
-                onChange={(v) => onUpdate({ bedrooms: v })}
-                placeholder="4"
-              />
-              <ManualIntField
-                label="Bathrooms"
-                value={property.bathrooms}
-                onChange={(v) => onUpdate({ bathrooms: v })}
-                placeholder="2"
-              />
-              <ManualIntField
-                label="Land size (m²)"
-                value={property.landSize}
-                onChange={(v) => onUpdate({ landSize: v })}
-                placeholder="800"
-              />
-              <ManualIntField
-                label="Car spaces"
-                value={property.carSpaces}
-                onChange={(v) => onUpdate({ carSpaces: v })}
-                placeholder="2"
-              />
-            </div>
-          </div>
-        </details>
-      )}
-
-      {/* Property details preview */}
-      {property.estimatedValue > 0 && (
-        <div className="text-center text-sm">
-          <div className="text-lg font-bold text-[var(--positive)]">
-            {formatCurrency(property.estimatedValue)}
-          </div>
-          {property.valueLow > 0 && (
-            <div className="text-xs text-[var(--muted)]">
-              Range: {formatCurrency(property.valueLow)} – {formatCurrency(property.valueHigh)}
-            </div>
-          )}
-        </div>
-      )}
-
-      {(property.bedrooms || property.bathrooms || property.carSpaces || property.landSize) && (
-        <div className="grid grid-cols-4 gap-2 text-xs text-center">
-          {property.bedrooms !== null && <Chip label={`${property.bedrooms} bed`} />}
-          {property.bathrooms !== null && <Chip label={`${property.bathrooms} bath`} />}
-          {property.carSpaces !== null && <Chip label={`${property.carSpaces} car`} />}
-          {property.landSize !== null && <Chip label={`${property.landSize}m²`} />}
-        </div>
-      )}
-
       {/* Type + Owner */}
       <div className="grid grid-cols-2 gap-3">
         <div>
@@ -321,50 +245,68 @@ function PropertyCard({
   );
 }
 
-function Chip({ label }: { label: string }) {
-  return <span className="bg-[var(--card-border)] rounded px-2 py-1">{label}</span>;
-}
+const MAX_DOCS = 3;
 
-function ReaScreenshotUpload({
+function PropertyDocsUpload({
   property, onUpdate,
 }: {
   property: SetupProperty;
   onUpdate: (partial: Partial<SetupProperty>) => void;
 }) {
+  const [files, setFiles] = useState<File[]>([]);
+  const [previews, setPreviews] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
-  async function handleUpload(file: File) {
+  function addFiles(newFiles: FileList | null) {
+    if (!newFiles || newFiles.length === 0) return;
+    const remaining = MAX_DOCS - files.length;
+    const toAdd = Array.from(newFiles).slice(0, remaining);
+    const newPreviews = toAdd.map((f) => URL.createObjectURL(f));
+    setFiles([...files, ...toAdd]);
+    setPreviews([...previews, ...newPreviews]);
+    setSuccess(false);
+    setError(null);
+  }
+
+  function removeFile(idx: number) {
+    URL.revokeObjectURL(previews[idx]);
+    setFiles(files.filter((_, i) => i !== idx));
+    setPreviews(previews.filter((_, i) => i !== idx));
+    setSuccess(false);
+    setError(null);
+  }
+
+  async function extract() {
+    if (files.length === 0) return;
     setLoading(true);
     setError(null);
     setSuccess(false);
     try {
       const form = new FormData();
-      form.append("file", file);
-      const res = await fetch("/api/ocr-rea-screenshot", { method: "POST", body: form });
+      files.forEach((f) => form.append("files", f));
+      const res = await fetch("/api/ocr-property", { method: "POST", body: form });
       const data = await res.json();
 
       if (!data.ok || !data.data) {
-        setError(data.error || "Could not read screenshot");
+        setError(data.error || "Could not read documents");
       } else {
         const d = data.data;
         const partial: Partial<SetupProperty> = {};
-        if (d.address && !property.address) partial.address = d.address;
-        if (d.suburb && !property.suburb) partial.suburb = d.suburb;
-        if (d.state && !property.state) partial.state = d.state;
-        if (d.postcode && !property.postcode) partial.postcode = d.postcode;
-        if (d.bedrooms) partial.bedrooms = d.bedrooms;
-        if (d.bathrooms) partial.bathrooms = d.bathrooms;
-        if (d.carSpaces) partial.carSpaces = d.carSpaces;
-        if (d.landSize) partial.landSize = d.landSize;
-        if (d.propertyType) partial.propertyType = d.propertyType;
-        if (d.estimatedValue) partial.estimatedValue = d.estimatedValue;
-        if (d.estimatedValueLow) partial.valueLow = d.estimatedValueLow;
-        if (d.estimatedValueHigh) partial.valueHigh = d.estimatedValueHigh;
-        if (d.weeklyRent && property.type === "Investment") partial.weeklyRent = d.weeklyRent;
-        onUpdate(partial);
-        setSuccess(true);
+        if (d.address) partial.address = d.address;
+        if (d.suburb) partial.suburb = d.suburb;
+        if (d.state) partial.state = d.state;
+        if (d.postcode) partial.postcode = String(d.postcode);
+        if (d.estimatedValue && Number(d.estimatedValue) > 0) {
+          partial.estimatedValue = Number(d.estimatedValue);
+        }
+        if (Object.keys(partial).length === 0) {
+          setError("No details found in the uploaded documents");
+        } else {
+          onUpdate(partial);
+          setSuccess(true);
+        }
       }
     } catch (err) {
       setError("Upload failed: " + String(err));
@@ -372,96 +314,70 @@ function ReaScreenshotUpload({
     setLoading(false);
   }
 
-  return (
-    <div className="space-y-2 bg-[var(--background)] border border-[var(--card-border)] rounded-lg p-3">
-      <label className="text-xs text-[var(--muted)] block">
-        Upload REA screenshot for auto-fill
-      </label>
-      <p className="text-xs text-[var(--muted)]">
-        Open your property on realestate.com.au (signed in to see the valuation).
-        Take a screenshot of the price/rent estimate section and upload it here.
-        We&apos;ll read all the values automatically.
-      </p>
+  const canAddMore = files.length < MAX_DOCS;
 
-      <label className="block border-2 border-dashed border-[var(--card-border)] rounded-lg p-4 text-center cursor-pointer hover:border-[var(--accent)] transition-colors">
-        {loading ? (
-          <span className="text-sm text-[var(--accent)] animate-pulse">Reading screenshot...</span>
-        ) : (
-          <span className="text-sm text-[var(--muted)]">Tap to upload screenshot</span>
-        )}
-        <input
-          type="file"
-          accept="image/*"
-          capture="environment"
-          className="hidden"
+  return (
+    <div className="space-y-3 bg-[var(--background)] border border-[var(--card-border)] rounded-lg p-3">
+      <div>
+        <label className="text-xs text-[var(--muted)] block">
+          Auto-fill from property documents (optional)
+        </label>
+        <p className="text-xs text-[var(--muted)] mt-1">
+          Upload up to {MAX_DOCS} images (rates notice, valuation, listing, rental statement, etc.).
+          We&apos;ll read the address and estimated value automatically.
+        </p>
+      </div>
+
+      {previews.length > 0 && (
+        <div className="grid grid-cols-3 gap-2">
+          {previews.map((src, i) => (
+            <div key={i} className="relative aspect-square rounded overflow-hidden border border-[var(--card-border)]">
+              <img src={src} alt={`Document ${i + 1}`} className="w-full h-full object-cover" />
+              <button
+                type="button"
+                onClick={() => removeFile(i)}
+                className="absolute top-1 right-1 bg-black/70 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center hover:bg-black/90"
+                aria-label="Remove image"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {canAddMore && (
+        <label className="block border-2 border-dashed border-[var(--card-border)] rounded-lg p-4 text-center cursor-pointer hover:border-[var(--accent)] transition-colors">
+          <span className="text-sm text-[var(--muted)]">
+            {files.length === 0 ? "Tap to choose images" : `Add another (${files.length}/${MAX_DOCS})`}
+          </span>
+          <input
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            disabled={loading}
+            onChange={(e) => {
+              addFiles(e.target.files);
+              e.target.value = "";
+            }}
+          />
+        </label>
+      )}
+
+      {files.length > 0 && (
+        <button
+          type="button"
+          onClick={extract}
           disabled={loading}
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) handleUpload(f);
-            e.target.value = "";
-          }}
-        />
-      </label>
+          className="w-full bg-[var(--accent)] text-white rounded-lg py-2 text-sm font-medium hover:bg-[var(--accent-hover)] transition-colors disabled:opacity-40"
+        >
+          {loading ? "Reading documents..." : `Extract details from ${files.length} image${files.length === 1 ? "" : "s"}`}
+        </button>
+      )}
 
       {error && <p className="text-xs text-[var(--negative)]">{error}</p>}
-      {success && <p className="text-xs text-[var(--positive)]">Data extracted from screenshot</p>}
-    </div>
-  );
-}
-
-function ManualField({
-  label, value, onChange, prefix, suffix, placeholder,
-}: {
-  label: string;
-  value: number;
-  onChange: (v: number) => void;
-  prefix?: string;
-  suffix?: string;
-  placeholder?: string;
-}) {
-  return (
-    <div>
-      <label className="text-xs text-[var(--muted)]">{label}</label>
-      <div className="relative">
-        {prefix && (
-          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[var(--muted)] text-xs">{prefix}</span>
-        )}
-        <input
-          type="number"
-          value={value || ""}
-          onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
-          placeholder={placeholder}
-          className={`w-full bg-[var(--card)] border border-[var(--card-border)] rounded px-2 py-1.5 text-xs outline-none focus:border-[var(--accent)] ${prefix ? "pl-5" : ""} ${suffix ? "pr-8" : ""}`}
-        />
-        {suffix && (
-          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--muted)] text-[10px]">{suffix}</span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function ManualIntField({
-  label, value, onChange, placeholder,
-}: {
-  label: string;
-  value: number | null;
-  onChange: (v: number | null) => void;
-  placeholder?: string;
-}) {
-  return (
-    <div>
-      <label className="text-xs text-[var(--muted)]">{label}</label>
-      <input
-        type="number"
-        value={value ?? ""}
-        onChange={(e) => {
-          const v = e.target.value === "" ? null : parseInt(e.target.value, 10);
-          onChange(Number.isNaN(v as number) ? null : v);
-        }}
-        placeholder={placeholder}
-        className="w-full bg-[var(--card)] border border-[var(--card-border)] rounded px-2 py-1.5 text-xs outline-none focus:border-[var(--accent)]"
-      />
+      {success && <p className="text-xs text-[var(--positive)]">Details extracted — review fields below</p>}
     </div>
   );
 }
