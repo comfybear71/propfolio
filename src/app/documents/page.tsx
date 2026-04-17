@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useIncomes, useProperties } from "@/lib/useData";
 
 interface Document {
   id: string;
@@ -10,98 +11,103 @@ interface Document {
   status: "missing" | "have" | "expired" | "requested" | "n/a";
   notes: string;
   lastUpdated: string;
-  forPerson: "Stuart" | "Sasitron" | "Both" | "Property";
+  forPerson: string;
 }
 
-const documentCategories = [
-  {
-    name: "Identity & Personal",
-    icon: "ID",
-    docs: [
-      { name: "Photo ID (Drivers Licence)", description: "Current and not expired", forPerson: "Both" as const },
-      { name: "Passport", description: "Current passport or certified copy", forPerson: "Both" as const },
-      { name: "Medicare Card", description: "Current Medicare card", forPerson: "Both" as const },
-      { name: "Birth Certificate / Citizenship", description: "Proof of Australian citizenship or residency", forPerson: "Both" as const },
-    ],
-  },
-  {
-    name: "Income & Employment",
-    icon: "Pay",
-    docs: [
-      { name: "Latest 2 payslips", description: "Most recent consecutive payslips showing YTD", forPerson: "Both" as const },
-      { name: "Employment letter / contract", description: "Confirming role, salary, and employment type", forPerson: "Both" as const },
-      { name: "Tax return (latest)", description: "Latest ATO tax return / Notice of Assessment", forPerson: "Both" as const },
-      { name: "Tax return (previous year)", description: "Previous year's ATO tax return / NOA", forPerson: "Both" as const },
-      { name: "Rental income evidence", description: "Lease agreements, property manager statements", forPerson: "Both" as const },
-      { name: "Group Certificate / PAYG Summary", description: "Annual income summary from employer", forPerson: "Both" as const },
-    ],
-  },
-  {
-    name: "Assets & Savings",
-    icon: "Bank",
-    docs: [
-      { name: "Bank statements (3 months)", description: "All transaction accounts showing savings pattern", forPerson: "Both" as const },
-      { name: "Offset account statements", description: "Current offset account balance and history", forPerson: "Sasitron" as const },
-      { name: "Superannuation statement", description: "Latest super balance statement", forPerson: "Both" as const },
-      { name: "Share portfolio / investments", description: "Any managed funds, shares, crypto holdings", forPerson: "Both" as const },
-      { name: "Vehicle registration", description: "Proof of vehicle ownership and value", forPerson: "Both" as const },
-    ],
-  },
-  {
-    name: "Existing Properties",
-    icon: "Home",
-    docs: [
-      { name: "60 Bagshaw - Title deed", description: "Certificate of Title", forPerson: "Stuart" as const },
-      { name: "60 Bagshaw - Mortgage statement", description: "Latest home loan statement", forPerson: "Stuart" as const },
-      { name: "60 Bagshaw - Council rates notice", description: "Latest rates notice from council", forPerson: "Stuart" as const },
-      { name: "60 Bagshaw - Insurance certificate", description: "Home & contents / landlord insurance", forPerson: "Stuart" as const },
-      { name: "60 Bagshaw - Rental agreements", description: "Room rental agreements with tenants", forPerson: "Stuart" as const },
-      { name: "72 Bagshaw - Title deed", description: "Certificate of Title", forPerson: "Sasitron" as const },
-      { name: "72 Bagshaw - Mortgage statement", description: "Latest home loan statement from ING", forPerson: "Sasitron" as const },
-      { name: "72 Bagshaw - Lease agreement", description: "Current tenant lease agreement", forPerson: "Sasitron" as const },
-      { name: "72 Bagshaw - Property manager statement", description: "Rental income statements from agent", forPerson: "Sasitron" as const },
-      { name: "72 Bagshaw - Council rates notice", description: "Latest rates notice from council", forPerson: "Sasitron" as const },
-      { name: "72 Bagshaw - Insurance certificate", description: "Landlord insurance policy", forPerson: "Sasitron" as const },
-      { name: "72 Bagshaw - Depreciation schedule", description: "Tax depreciation schedule from quantity surveyor", forPerson: "Sasitron" as const },
-    ],
-  },
-  {
-    name: "Liabilities & Commitments",
-    icon: "Debt",
-    docs: [
-      { name: "Credit card statements", description: "All credit cards — latest statements showing limits", forPerson: "Both" as const },
-      { name: "Personal loan statements", description: "Any personal loans, car loans, BNPL", forPerson: "Both" as const },
-      { name: "HECS-HELP statement", description: "Outstanding HECS/HELP debt balance", forPerson: "Both" as const },
-      { name: "Child support / maintenance", description: "Any ongoing support obligations", forPerson: "Both" as const },
-    ],
-  },
-  {
-    name: "Living Expenses",
-    icon: "Bills",
-    docs: [
-      { name: "Monthly expense breakdown", description: "Detailed living expenses (use Propfolio Finances page)", forPerson: "Both" as const },
-      { name: "Health insurance statement", description: "Private health cover details", forPerson: "Both" as const },
-      { name: "Childcare / school fees", description: "Any education costs", forPerson: "Both" as const },
-    ],
-  },
-  {
-    name: "New Purchase (when ready)",
-    icon: "New",
-    docs: [
-      { name: "Contract of Sale", description: "Signed contract for the property being purchased", forPerson: "Property" as const },
-      { name: "Building & pest report", description: "Pre-purchase inspection reports", forPerson: "Property" as const },
-      { name: "Valuation report", description: "Bank-ordered or independent valuation", forPerson: "Property" as const },
-      { name: "Builder quote / fixed price contract", description: "For new builds — construction costs breakdown", forPerson: "Property" as const },
-      { name: "NT BuildBonus grant application", description: "$30,000 NT Government grant for new builds", forPerson: "Property" as const },
-      { name: "Council / planning approvals", description: "Development approval if building", forPerson: "Property" as const },
-    ],
-  },
-];
+// Build document checklist dynamically from actual user data
+function buildDocumentCategories(
+  people: { person: string }[],
+  properties: { address: string; owner: string }[]
+) {
+  const propertyDocs = properties.flatMap((p) => {
+    const addr = p.address.split(",")[0].trim() || p.address;
+    const owner = p.owner || "Owner";
+    return [
+      { name: `${addr} - Title deed`, description: "Certificate of Title", forPerson: owner },
+      { name: `${addr} - Mortgage statement`, description: "Latest home loan statement", forPerson: owner },
+      { name: `${addr} - Council rates notice`, description: "Latest rates notice from council", forPerson: owner },
+      { name: `${addr} - Insurance certificate`, description: "Home & contents / landlord insurance", forPerson: owner },
+      { name: `${addr} - Rental agreements`, description: "Lease or room rental agreements", forPerson: owner },
+    ];
+  });
 
-function createDefaultDocuments(): Document[] {
+  return [
+    {
+      name: "Identity & Personal",
+      icon: "ID",
+      docs: [
+        { name: "Photo ID (Drivers Licence)", description: "Current and not expired", forPerson: "All" },
+        { name: "Passport", description: "Current passport or certified copy", forPerson: "All" },
+        { name: "Medicare Card", description: "Current Medicare card", forPerson: "All" },
+        { name: "Birth Certificate / Citizenship", description: "Proof of Australian citizenship or residency", forPerson: "All" },
+      ],
+    },
+    {
+      name: "Income & Employment",
+      icon: "Pay",
+      docs: [
+        { name: "Latest 2 payslips", description: "Most recent consecutive payslips showing YTD", forPerson: "All" },
+        { name: "Employment letter / contract", description: "Confirming role, salary, and employment type", forPerson: "All" },
+        { name: "Tax return (latest)", description: "Latest ATO tax return / Notice of Assessment", forPerson: "All" },
+        { name: "Tax return (previous year)", description: "Previous year's ATO tax return / NOA", forPerson: "All" },
+        { name: "Rental income evidence", description: "Lease agreements, property manager statements", forPerson: "All" },
+        { name: "Group Certificate / PAYG Summary", description: "Annual income summary from employer", forPerson: "All" },
+      ],
+    },
+    {
+      name: "Assets & Savings",
+      icon: "Bank",
+      docs: [
+        { name: "Bank statements (3 months)", description: "All transaction accounts showing savings pattern", forPerson: "All" },
+        { name: "Offset account statements", description: "Current offset account balance and history", forPerson: "All" },
+        { name: "Superannuation statement", description: "Latest super balance statement", forPerson: "All" },
+        { name: "Share portfolio / investments", description: "Any managed funds, shares, crypto holdings", forPerson: "All" },
+        { name: "Vehicle registration", description: "Proof of vehicle ownership and value", forPerson: "All" },
+      ],
+    },
+    ...(propertyDocs.length > 0 ? [{
+      name: "Existing Properties",
+      icon: "Home",
+      docs: propertyDocs,
+    }] : []),
+    {
+      name: "Liabilities & Commitments",
+      icon: "Debt",
+      docs: [
+        { name: "Credit card statements", description: "All credit cards — latest statements showing limits", forPerson: "All" },
+        { name: "Personal loan statements", description: "Any personal loans, car loans, BNPL", forPerson: "All" },
+        { name: "HECS-HELP statement", description: "Outstanding HECS/HELP debt balance", forPerson: "All" },
+        { name: "Child support / maintenance", description: "Any ongoing support obligations", forPerson: "All" },
+      ],
+    },
+    {
+      name: "Living Expenses",
+      icon: "Bills",
+      docs: [
+        { name: "Monthly expense breakdown", description: "Detailed living expenses (use Propfolio Finances page)", forPerson: "All" },
+        { name: "Health insurance statement", description: "Private health cover details", forPerson: "All" },
+        { name: "Childcare / school fees", description: "Any education costs", forPerson: "All" },
+      ],
+    },
+    {
+      name: "New Purchase (when ready)",
+      icon: "New",
+      docs: [
+        { name: "Contract of Sale", description: "Signed contract for the property being purchased", forPerson: "Property" },
+        { name: "Building & pest report", description: "Pre-purchase inspection reports", forPerson: "Property" },
+        { name: "Valuation report", description: "Bank-ordered or independent valuation", forPerson: "Property" },
+        { name: "Builder quote / fixed price contract", description: "For new builds — construction costs breakdown", forPerson: "Property" },
+        { name: "NT BuildBonus grant application", description: "$30,000 NT Government grant for new builds", forPerson: "Property" },
+        { name: "Council / planning approvals", description: "Development approval if building", forPerson: "Property" },
+      ],
+    },
+  ];
+}
+
+function createDefaultDocuments(categories: ReturnType<typeof buildDocumentCategories>): Document[] {
   const docs: Document[] = [];
   let id = 1;
-  for (const cat of documentCategories) {
+  for (const cat of categories) {
     for (const doc of cat.docs) {
       docs.push({
         id: String(id++),
@@ -130,6 +136,10 @@ interface FileRecord {
 }
 
 export default function DocumentsPage() {
+  const { incomes } = useIncomes();
+  const { properties } = useProperties();
+  const documentCategories = buildDocumentCategories(incomes, properties);
+  const personNames = [...new Set(incomes.map((i) => i.person?.split(" ")[0]).filter(Boolean))];
   const [documents, setDocuments] = useState<Document[]>([]);
   const [files, setFiles] = useState<FileRecord[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -153,7 +163,7 @@ export default function DocumentsPage() {
       fetch("/api/files").then((r) => r.json()).catch(() => []),
     ]).then(([docs, fileList]) => {
       if (docs.length > 0) setDocuments(docs);
-      else setDocuments(createDefaultDocuments());
+      else setDocuments(createDefaultDocuments(documentCategories));
       if (Array.isArray(fileList)) setFiles(fileList);
       setLoaded(true);
     });
@@ -171,7 +181,7 @@ export default function DocumentsPage() {
   }
 
   function resetAll() {
-    const defaults = createDefaultDocuments();
+    const defaults = createDefaultDocuments(documentCategories);
     setDocuments(defaults);
     saveDocuments(defaults);
   }
@@ -294,7 +304,7 @@ export default function DocumentsPage() {
       <div className="space-y-2">
         <div className="flex items-center gap-1.5 overflow-x-auto">
           <span className="text-xs text-[var(--muted)] shrink-0">Person:</span>
-          {["All", "Stuart", "Sasitron", "Property"].map((p) => (
+          {["All", ...personNames, "Property"].map((p) => (
             <button key={p} onClick={() => setFilterPerson(p)}
               className={`text-[11px] px-2 py-1 rounded border transition-colors shrink-0 ${
                 filterPerson === p
@@ -351,8 +361,8 @@ export default function DocumentsPage() {
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="font-medium text-sm">{doc.name}</span>
                         <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-                          doc.forPerson === "Stuart" ? "bg-blue-500/20 text-blue-400" :
-                          doc.forPerson === "Sasitron" ? "bg-purple-500/20 text-purple-400" :
+                          doc.forPerson === "All" ? "bg-[var(--card-border)] text-[var(--muted)]" :
+                          doc.forPerson === "Property" ? "bg-orange-500/20 text-orange-400" :
                           doc.forPerson === "Property" ? "bg-orange-500/20 text-orange-400" :
                           "bg-[var(--card-border)] text-[var(--muted)]"
                         }`}>{doc.forPerson}</span>

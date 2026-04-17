@@ -192,7 +192,7 @@ export default function TaxGuidePage() {
             </div>
             <div className="rounded bg-[var(--background)] p-3">
               <p className="font-medium text-[var(--foreground)] mb-1">PPOR Exemption</p>
-              <p>Your principal place of residence (60 Bagshaw) is generally CGT-free when sold. The 6-year absence rule lets you rent it out for up to 6 years while still claiming the exemption.</p>
+              <p>Your principal place of residence (PPOR) is generally CGT-free when sold. The 6-year absence rule lets you rent it out for up to 6 years while still claiming the exemption.</p>
             </div>
             <div className="rounded bg-[var(--background)] p-3">
               <p className="font-medium text-[var(--foreground)] mb-1">Cost Base Additions</p>
