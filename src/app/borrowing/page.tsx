@@ -32,7 +32,7 @@ export default function BorrowingPage() {
     return <div className="text-center text-[var(--muted)] py-20">Loading...</div>;
   }
 
-  if (properties.length === 0 && incomes.length === 0) {
+  if (properties.length === 0 && incomes.length === 0 && loans.length === 0) {
     return (
       <div className="text-center py-20 space-y-3">
         <h2 className="text-2xl font-bold">Borrowing & New Build Planner</h2>
