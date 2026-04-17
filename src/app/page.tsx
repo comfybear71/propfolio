@@ -13,9 +13,11 @@ export default function Dashboard() {
   const { loans, loaded: lLoaded } = useLoans();
   const { incomes, loaded: iLoaded } = useIncomes();
   const { settings: borrowingSettings, loaded: bLoaded } = useBorrowingSettings({
-    stuartGross: 157073, sasitronGross: 87882,
-    rentalIncome60: 72800, rentalIncome72: 52000,
-    monthlyExpenses: 5000, existingDebt: 58503,
+    stuartGross: incomes[0]?.annualGross ?? 0,
+    sasitronGross: incomes[1]?.annualGross ?? 0,
+    rentalIncome60: (properties[0]?.weeklyRent ?? 0) * 52,
+    rentalIncome72: (properties[1]?.weeklyRent ?? 0) * 52,
+    monthlyExpenses: 0, existingDebt: 0,
     landPrice: 250000, buildCost: 350000, depositPercent: 20,
     newLoanRate: 6.5, newLoanTerm: 30, expectedRent: 600,
     useEquity: true, claimBuildBonus: true,

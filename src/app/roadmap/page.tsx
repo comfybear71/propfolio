@@ -32,6 +32,16 @@ export default function RoadmapPage() {
 
   if (!pL || !lL || !iL) return <div className="text-center text-[var(--muted)] py-20">Loading...</div>;
 
+  if (properties.length === 0 && incomes.length === 0) {
+    return (
+      <div className="text-center py-20 space-y-3 max-w-4xl mx-auto">
+        <h2 className="text-2xl font-bold">Your Property Investment Roadmap</h2>
+        <p className="text-[var(--muted)]">Complete your setup first to generate a personalised roadmap.</p>
+        <a href="/setup" className="inline-block px-6 py-2 bg-[var(--accent)] text-white rounded-lg text-sm">Go to Setup</a>
+      </div>
+    );
+  }
+
   // Current position
   const totalValue = properties.reduce((s, p) => s + p.currentValue, 0);
   const totalDebt = loans.reduce((s, l) => s + l.balance, 0);

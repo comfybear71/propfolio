@@ -7,18 +7,19 @@ import { formatCurrency } from "@/lib/data";
 interface Props {
   people: Person[];
   onUpdate: (people: Person[]) => void;
+  onAddPerson: (person: Person) => void;
+  onUpdatePerson: (id: string, update: Partial<Person>) => void;
   onNext: () => void;
 }
 
-export default function StepWelcome({ people, onUpdate, onNext }: Props) {
+export default function StepWelcome({ people, onUpdate, onAddPerson, onUpdatePerson, onNext }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   async function handleFileUpload(file: File) {
-    // Add a placeholder person while OCR runs
+    // Add a placeholder person — uses addPerson (functional updater, no stale closure)
     const newPerson = createPerson("Reading payslip...");
     newPerson.ocrLoading = true;
     newPerson.payslipFile = file;
-    const updatedPeople = [...people, newPerson];
-    onUpdate(updatedPeople);
+    onAddPerson(newPerson);
 
     try {
       const form = new FormData();
@@ -31,11 +32,10 @@ export default function StepWelcome({ people, onUpdate, onNext }: Props) {
         const grossPay = d.grossPay || 0;
         const netPay = d.netPay || 0;
         const freq = d.payFrequency === "monthly" ? 12 : d.payFrequency === "weekly" ? 52 : 26;
-        const name = d.employeeName || "Unknown";
 
-        const finished: Person = {
-          ...newPerson,
-          name,
+        // Update by ID — safe even if other uploads are in-flight
+        onUpdatePerson(newPerson.id, {
+          name: d.employeeName || "Unknown",
           ocrLoading: false,
           ocrDone: true,
           income: {
@@ -50,21 +50,12 @@ export default function StepWelcome({ people, onUpdate, onNext }: Props) {
             taxWithheld: d.taxWithheld || 0,
             hourlyRate: d.hourlyRate || 0,
           },
-        };
-
-        onUpdate([...people, finished]);
+        });
       } else {
-        // OCR failed — let user enter name manually
-        onUpdate([
-          ...people,
-          { ...newPerson, name: "", ocrLoading: false, ocrDone: false },
-        ]);
+        onUpdatePerson(newPerson.id, { name: "", ocrLoading: false, ocrDone: false });
       }
     } catch {
-      onUpdate([
-        ...people,
-        { ...newPerson, name: "", ocrLoading: false, ocrDone: false },
-      ]);
+      onUpdatePerson(newPerson.id, { name: "", ocrLoading: false, ocrDone: false });
     }
   }
 
@@ -98,9 +89,8 @@ export default function StepWelcome({ people, onUpdate, onNext }: Props) {
   }
 
   function retryUpload(i: number, file: File) {
-    const updated = [...people];
-    updated[i] = { ...updated[i], ocrLoading: true, payslipFile: file };
-    onUpdate(updated);
+    const personId = people[i].id;
+    onUpdatePerson(personId, { ocrLoading: true, payslipFile: file });
 
     const form = new FormData();
     form.append("file", file);
@@ -113,9 +103,8 @@ export default function StepWelcome({ people, onUpdate, onNext }: Props) {
           const netPay = d.netPay || 0;
           const freq = d.payFrequency === "monthly" ? 12 : d.payFrequency === "weekly" ? 52 : 26;
 
-          updated[i] = {
-            ...updated[i],
-            name: d.employeeName || updated[i].name,
+          onUpdatePerson(personId, {
+            name: d.employeeName || people[i].name,
             ocrLoading: false,
             ocrDone: true,
             income: {
@@ -130,16 +119,13 @@ export default function StepWelcome({ people, onUpdate, onNext }: Props) {
               taxWithheld: d.taxWithheld || 0,
               hourlyRate: d.hourlyRate || 0,
             },
-          };
-          onUpdate([...updated]);
+          });
         } else {
-          updated[i] = { ...updated[i], ocrLoading: false };
-          onUpdate([...updated]);
+          onUpdatePerson(personId, { ocrLoading: false });
         }
       })
       .catch(() => {
-        updated[i] = { ...updated[i], ocrLoading: false };
-        onUpdate([...updated]);
+        onUpdatePerson(personId, { ocrLoading: false });
       });
   }
 

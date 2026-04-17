@@ -1,9 +1,6 @@
 "use client";
 
 import {
-  properties as defaultProperties,
-  loans as defaultLoans,
-  incomes as defaultIncomes,
   formatCurrency,
   formatCurrencyExact,
 } from "@/lib/data";
@@ -14,16 +11,13 @@ export default function BorrowingPage() {
   const { loans, loaded: lLoaded } = useLoans();
   const { incomes, loaded: iLoaded } = useIncomes();
 
-  // Default values from DB data or fallbacks
-  const defaultDebt = defaultLoans.reduce((s, l) => s + l.repaymentAmount * (l.repaymentFrequency === "fortnightly" ? 26 : 12), 0);
-
   const { settings: s, update, loaded: sLoaded } = useBorrowingSettings({
-    stuartGross: defaultIncomes[0]?.annualGross ?? 157073,
-    sasitronGross: defaultIncomes[1]?.annualGross ?? 87882,
-    rentalIncome60: (defaultProperties[0]?.weeklyRent ?? 1400) * 52,
-    rentalIncome72: (defaultProperties[1]?.weeklyRent ?? 1000) * 52,
-    monthlyExpenses: 5000,
-    existingDebt: defaultDebt,
+    stuartGross: incomes[0]?.annualGross ?? 0,
+    sasitronGross: incomes[1]?.annualGross ?? 0,
+    rentalIncome60: (properties[0]?.weeklyRent ?? 0) * 52,
+    rentalIncome72: (properties[1]?.weeklyRent ?? 0) * 52,
+    monthlyExpenses: 0,
+    existingDebt: loans.reduce((s, l) => s + l.repaymentAmount * (l.repaymentFrequency === "fortnightly" ? 26 : 12), 0),
     landPrice: 250000,
     buildCost: 350000,
     depositPercent: 20,
