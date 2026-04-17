@@ -34,6 +34,16 @@ export default function StrategyPage() {
     return <div className="text-center text-[var(--muted)] py-20">Loading...</div>;
   }
 
+  if (properties.length === 0 && incomes.length === 0) {
+    return (
+      <div className="text-center py-20 space-y-3">
+        <h2 className="text-2xl font-bold">5-Year Growth Strategy</h2>
+        <p className="text-[var(--muted)]">Complete your setup first to see your strategy.</p>
+        <a href="/setup" className="inline-block px-6 py-2 bg-[var(--accent)] text-white rounded-lg text-sm">Go to Setup</a>
+      </div>
+    );
+  }
+
   const { plan, growthRate, rentGrowth } = strategy;
 
   function updatePlan(index: number, field: keyof PlannedProperty, value: number) {
