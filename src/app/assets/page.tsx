@@ -2,12 +2,14 @@
 
 import { useRef, useCallback } from "react";
 import { formatCurrency, type Asset } from "@/lib/data";
-import { useAssets } from "@/lib/useData";
+import { useAssets, useIncomes } from "@/lib/useData";
 
 const categories = ["Superannuation", "Vehicle", "Portable Home", "Overseas Property", "Savings", "Shares", "Other"] as const;
 
 export default function AssetsPage() {
   const { assets, setAssets, saveAll, loaded } = useAssets();
+  const { incomes } = useIncomes();
+  const owners = [...new Set([...incomes.map((i) => i.person), ...assets.map((a) => a.owner)].filter(Boolean))];
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(null);
 
   const debouncedSave = useCallback((updated: Asset[]) => {
@@ -29,7 +31,7 @@ export default function AssetsPage() {
     const newId = Date.now().toString();
     const updated = [...assets, {
       id: newId,
-      owner: "Stuart French",
+      owner: owners[0] || "Owner",
       category: "Other" as const,
       description: "",
       estimatedValue: 0,
@@ -49,8 +51,11 @@ export default function AssetsPage() {
   // Totals
   const totalAssets = assets.reduce((s, a) => s + a.estimatedValue, 0);
   const totalLendingRelevant = assets.filter((a) => a.relevantForLending).reduce((s, a) => s + a.estimatedValue, 0);
-  const stuartAssets = assets.filter((a) => a.owner === "Stuart French").reduce((s, a) => s + a.estimatedValue, 0);
-  const sasitronAssets = assets.filter((a) => a.owner === "Sasitron Ransuk").reduce((s, a) => s + a.estimatedValue, 0);
+  // Group asset totals by owner dynamically
+  const assetsByOwner: Record<string, number> = {};
+  for (const a of assets) {
+    assetsByOwner[a.owner] = (assetsByOwner[a.owner] || 0) + a.estimatedValue;
+  }
 
   // Group by category
   const grouped: Record<string, Asset[]> = {};
@@ -70,8 +75,9 @@ export default function AssetsPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card label="Total Assets" value={formatCurrency(totalAssets)} positive />
         <Card label="Lending Relevant" value={formatCurrency(totalLendingRelevant)} positive subtext="can show banks" />
-        <Card label="Stuart&apos;s Assets" value={formatCurrency(stuartAssets)} />
-        <Card label="Sasitron&apos;s Assets" value={formatCurrency(sasitronAssets)} />
+        {Object.entries(assetsByOwner).slice(0, 2).map(([owner, total]) => (
+          <Card key={owner} label={`${owner.split(" ")[0]}'s Assets`} value={formatCurrency(total)} />
+        ))}
       </div>
 
       {/* Assets by Category */}
@@ -103,8 +109,9 @@ export default function AssetsPage() {
                           onChange={(e) => updateAsset(asset.id, "owner", e.target.value)}
                           className="bg-[var(--background)] border border-[var(--card-border)] rounded px-2 py-0.5 text-xs focus:border-[var(--accent)] outline-none"
                         >
-                          <option value="Stuart French">Stuart</option>
-                          <option value="Sasitron Ransuk">Sasitron</option>
+                          {owners.map((o) => (
+                            <option key={o} value={o}>{o.split(" ")[0]}</option>
+                          ))}
                           <option value="Joint">Joint</option>
                         </select>
                         <select

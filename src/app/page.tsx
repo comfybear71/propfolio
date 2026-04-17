@@ -195,7 +195,7 @@ export default function Dashboard() {
           <ProgressMilestone
             label="Offset"
             progress={offsetProgress}
-            detail={`${offsetProgress.toFixed(0)}% of 72 Bagshaw`}
+            detail={`${offsetProgress.toFixed(0)}% of ${properties[1]?.address || "Property 2"}`}
             complete={offsetProgress >= 100}
           />
         </div>
@@ -280,8 +280,9 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
             <div className="space-y-2">
               <div className="text-xs font-medium text-[var(--muted)] uppercase tracking-wide">Step 1: Get Deposit</div>
-              <div className="flex justify-between"><span className="text-[var(--muted)]">Release from 60 Bagshaw</span><span>{formatCurrency(Math.min(equityPerProperty[0]?.usable ?? 0, 100000))}</span></div>
-              <div className="flex justify-between"><span className="text-[var(--muted)]">Release from 72 Bagshaw</span><span>{formatCurrency(Math.min(equityPerProperty[1]?.usable ?? 0, 100000))}</span></div>
+              {equityPerProperty.slice(0, 2).map((e, i) => (
+                <div key={i} className="flex justify-between"><span className="text-[var(--muted)]">Release from {e.address}</span><span>{formatCurrency(Math.min(e.usable, 100000))}</span></div>
+              ))}
               <div className="flex justify-between font-semibold border-t border-[var(--positive)]/20 pt-1"><span>Total Deposit</span><span className="text-[var(--positive)]">{formatCurrency(equityRelease)}</span></div>
               <div className="flex justify-between"><span className="text-[var(--muted)]">NT BuildBonus</span><span className="text-[var(--positive)]">+{formatCurrency(30000)}</span></div>
             </div>
@@ -320,7 +321,7 @@ export default function Dashboard() {
         <div className="mt-4 rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-4">
           <div className="text-xs font-medium text-[var(--muted)] mb-2">Tips to strengthen your position:</div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-xs text-[var(--muted)]">
-            <div>- Keep offset funds high (reduces interest on 72 Bagshaw)</div>
+            <div>- Keep offset funds high (reduces interest on investment loans)</div>
             <div>- Get formal property valuations (may be higher than estimates)</div>
             <div>- Close any unused credit cards before applying</div>
             <div>- Consider interest-only on investment loans (frees cash flow)</div>
@@ -337,7 +338,7 @@ export default function Dashboard() {
         <h3 className="text-lg font-semibold mb-4">Offset & Debt Reduction Strategy</h3>
         <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-5">
           <p className="text-sm text-[var(--muted)] mb-4">
-            Every dollar into offset/redraw saves interest. Once Sasitron&apos;s loan is 100% offset, all income shifts to the next property&apos;s offset.
+            Every dollar into offset/redraw saves interest. Once a property&apos;s loan is 100% offset, all income shifts to the next property&apos;s offset.
           </p>
 
           {/* Progress bars for each property */}
@@ -407,17 +408,23 @@ export default function Dashboard() {
             <div className="text-sm font-medium mb-2">Cash Flow Into Offset</div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
               <div className="space-y-1">
-                <div className="flex justify-between"><span className="text-[var(--muted)]">Stuart net pay</span><span>{formatCurrency(incomes[0]?.netFortnightly * 26)}/yr</span></div>
-                <div className="flex justify-between"><span className="text-[var(--muted)]">Sasitron net pay</span><span>{formatCurrency(incomes[1]?.netFortnightly * 26)}/yr</span></div>
-                <div className="flex justify-between"><span className="text-[var(--muted)]">60 Bagshaw rent</span><span>{formatCurrency(properties[0]?.weeklyRent * 52)}/yr</span></div>
-                <div className="flex justify-between"><span className="text-[var(--muted)]">72 Bagshaw rent</span><span>{formatCurrency(properties[1]?.weeklyRent * 52)}/yr</span></div>
+                {incomes.map((inc, i) => (
+                  <div key={i} className="flex justify-between"><span className="text-[var(--muted)]">{inc.person?.split(" ")[0] || `Person ${i+1}`} net pay</span><span>{formatCurrency(inc.netFortnightly * 26)}/yr</span></div>
+                ))}
+                {properties.filter(p => p.weeklyRent > 0).map((prop, i) => (
+                  <div key={i} className="flex justify-between"><span className="text-[var(--muted)]">{prop.address} rent</span><span>{formatCurrency(prop.weeklyRent * 52)}/yr</span></div>
+                ))}
                 <div className="flex justify-between font-semibold border-t border-[var(--card-border)] pt-1">
                   <span>Total income</span><span className="text-[var(--positive)]">{formatCurrency(totalAnnualNetIncome + annualRentalIncome)}/yr</span>
                 </div>
               </div>
               <div className="space-y-1">
-                <div className="flex justify-between"><span className="text-[var(--muted)]">60 Bagshaw repayment</span><span>-{formatCurrency(loans[0]?.repaymentAmount * (loans[0]?.repaymentFrequency === "fortnightly" ? 26 : 12))}/yr</span></div>
-                <div className="flex justify-between"><span className="text-[var(--muted)]">72 Bagshaw repayment</span><span>-{formatCurrency(loans[1]?.repaymentAmount * (loans[1]?.repaymentFrequency === "fortnightly" ? 26 : 12))}/yr</span></div>
+                {loans.map((loan, i) => {
+                  const prop = properties.find(p => p.id === loan.propertyId);
+                  return (
+                    <div key={i} className="flex justify-between"><span className="text-[var(--muted)]">{prop?.address || `Loan ${i+1}`} repayment</span><span>-{formatCurrency(loan.repaymentAmount * (loan.repaymentFrequency === "fortnightly" ? 26 : 12))}/yr</span></div>
+                  );
+                })}
                 <div className="flex justify-between"><span className="text-[var(--muted)]">Est. living expenses</span><span>-{formatCurrency(60000)}/yr</span></div>
                 <div className="flex justify-between font-semibold border-t border-[var(--card-border)] pt-1">
                   <span>Surplus to offset</span>
