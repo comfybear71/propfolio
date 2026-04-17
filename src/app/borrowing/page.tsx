@@ -32,6 +32,16 @@ export default function BorrowingPage() {
     return <div className="text-center text-[var(--muted)] py-20">Loading...</div>;
   }
 
+  if (properties.length === 0 && incomes.length === 0) {
+    return (
+      <div className="text-center py-20 space-y-3">
+        <h2 className="text-2xl font-bold">Borrowing & New Build Planner</h2>
+        <p className="text-[var(--muted)]">Complete your setup first to plan your next property.</p>
+        <a href="/setup" className="inline-block px-6 py-2 bg-[var(--accent)] text-white rounded-lg text-sm">Go to Setup</a>
+      </div>
+    );
+  }
+
   // Use DB values
   const { stuartGross, sasitronGross, rentalIncome60, rentalIncome72,
     monthlyExpenses, existingDebt, landPrice, buildCost, depositPercent,
