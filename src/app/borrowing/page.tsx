@@ -32,10 +32,30 @@ export default function BorrowingPage() {
     return <div className="text-center text-[var(--muted)] py-20">Loading...</div>;
   }
 
+  if (properties.length === 0 && incomes.length === 0 && loans.length === 0) {
+    return (
+      <div className="text-center py-20 space-y-3">
+        <h2 className="text-2xl font-bold">Borrowing & New Build Planner</h2>
+        <p className="text-[var(--muted)]">Complete your setup first to plan your next property.</p>
+        <a href="/setup" className="inline-block px-6 py-2 bg-[var(--accent)] text-white rounded-lg text-sm">Go to Setup</a>
+      </div>
+    );
+  }
+
   // Use DB values
   const { stuartGross, sasitronGross, rentalIncome60, rentalIncome72,
     monthlyExpenses, existingDebt, landPrice, buildCost, depositPercent,
     newLoanRate, newLoanTerm, expectedRent, useEquity, claimBuildBonus } = s;
+
+  // Purchase mode — new build vs existing property
+  const isNewBuild = landPrice > 0 || buildCost > 0 || claimBuildBonus;
+  const purchasePrice = landPrice + buildCost; // for existing, user puts full price in landPrice
+
+  // Dynamic labels from real data
+  const person1Name = incomes[0]?.person?.split(" ")[0] || "Person 1";
+  const person2Name = incomes[1]?.person?.split(" ")[0] || "Person 2";
+  const prop1Label = properties[0]?.address || "Property 1";
+  const prop2Label = properties[1]?.address || "Property 2";
 
   // Bank assessment rate (typically 3% buffer)
   const assessmentBuffer = 3.0;
@@ -72,8 +92,8 @@ export default function BorrowingPage() {
   // New Build calculations
   const totalPropertyCost = landPrice + buildCost;
   const ntBuildBonus = claimBuildBonus ? 30000 : 0;
-  // Stamp duty on LAND ONLY for new builds in NT
-  const stampDutyOnLand = calculateNTStampDuty(landPrice);
+  // Stamp duty: land only for new builds, full price for existing
+  const stampDutyOnLand = isNewBuild ? calculateNTStampDuty(landPrice) : calculateNTStampDuty(totalPropertyCost);
   const depositAmount = totalPropertyCost * (depositPercent / 100);
   const newLoanAmount = totalPropertyCost - depositAmount;
   const totalCashNeeded = depositAmount + stampDutyOnLand - ntBuildBonus;
@@ -119,8 +139,28 @@ export default function BorrowingPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold mb-1">Borrowing & New Build Planner</h2>
-        <p className="text-[var(--muted)]">Plan your next new build using equity, the NT BuildBonus, and tax benefits</p>
+        <h2 className="text-2xl font-bold mb-1">Borrowing Planner</h2>
+        <p className="text-[var(--muted)]">Plan your next property purchase</p>
+      </div>
+
+      {/* New Build / Existing toggle */}
+      <div className="flex gap-0.5 bg-[var(--card)] rounded-lg p-0.5 border border-[var(--card-border)]">
+        <button
+          onClick={() => { update({ landPrice: 250000, buildCost: 350000, claimBuildBonus: true }); }}
+          className={`flex-1 py-2 px-2 rounded-md text-xs font-medium transition-colors ${
+            isNewBuild ? "bg-[var(--accent)] text-white" : "text-[var(--muted)] hover:text-white"
+          }`}
+        >
+          New Build (Land + Build)
+        </button>
+        <button
+          onClick={() => { update({ landPrice: 500000, buildCost: 0, claimBuildBonus: false }); }}
+          className={`flex-1 py-2 px-2 rounded-md text-xs font-medium transition-colors ${
+            !isNewBuild ? "bg-[var(--accent)] text-white" : "text-[var(--muted)] hover:text-white"
+          }`}
+        >
+          Existing Property
+        </button>
       </div>
 
       {/* Affordability verdict — most important, shown first */}
@@ -214,15 +254,21 @@ export default function BorrowingPage() {
 
       {/* Results — New Build Breakdown */}
       <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-5">
-        <h3 className="font-semibold mb-4">New Build Breakdown</h3>
+        <h3 className="font-semibold mb-4">{isNewBuild ? "New Build Breakdown" : "Purchase Breakdown"}</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="space-y-2">
             <h4 className="text-xs font-medium text-[var(--muted)] uppercase tracking-wide">Costs</h4>
-            <InfoRow label="Land" value={formatCurrency(landPrice)} />
-            <InfoRow label="Build" value={formatCurrency(buildCost)} />
+            {isNewBuild ? (
+              <>
+                <InfoRow label="Land" value={formatCurrency(landPrice)} />
+                <InfoRow label="Build" value={formatCurrency(buildCost)} />
+              </>
+            ) : (
+              <InfoRow label="Purchase Price" value={formatCurrency(totalPropertyCost)} />
+            )}
             <InfoRow label="Total Property Cost" value={formatCurrency(totalPropertyCost)} />
-            <InfoRow label="Stamp Duty (land only)" value={formatCurrency(stampDutyOnLand)} />
-            {claimBuildBonus && <InfoRow label="NT BuildBonus Grant" value={`-${formatCurrency(ntBuildBonus)}`} positive />}
+            <InfoRow label={isNewBuild ? "Stamp Duty (land only)" : "Stamp Duty (full price)"} value={formatCurrency(stampDutyOnLand)} />
+            {isNewBuild && claimBuildBonus && <InfoRow label="NT BuildBonus Grant" value={`-${formatCurrency(ntBuildBonus)}`} positive />}
             <div className="border-t border-[var(--card-border)] pt-2">
               <InfoRow label={`Deposit (${depositPercent}%)`} value={formatCurrency(depositAmount)} />
               <InfoRow label="Loan Amount" value={formatCurrency(newLoanAmount)} />
@@ -276,10 +322,16 @@ export default function BorrowingPage() {
           <h3 className="font-semibold mb-4">Your Financials</h3>
           <p className="text-xs text-[var(--muted)] mb-4">Adjust these to see how they affect borrowing capacity — changes auto-save</p>
           <div className="space-y-3">
-            <InputRow label="Stuart Gross Annual" value={stuartGross} onChange={(v) => update({ stuartGross: v })} prefix="$" />
-            <InputRow label="Sasitron Gross Annual" value={sasitronGross} onChange={(v) => update({ sasitronGross: v })} prefix="$" />
-            <InputRow label="60 Bagshaw Rent (annual)" value={rentalIncome60} onChange={(v) => update({ rentalIncome60: v })} prefix="$" />
-            <InputRow label="72 Bagshaw Rent (annual)" value={rentalIncome72} onChange={(v) => update({ rentalIncome72: v })} prefix="$" />
+            <InputRow label={`${person1Name} Gross Annual`} value={stuartGross} onChange={(v) => update({ stuartGross: v })} prefix="$" />
+            {(incomes.length > 1 || sasitronGross > 0) && (
+              <InputRow label={`${person2Name} Gross Annual`} value={sasitronGross} onChange={(v) => update({ sasitronGross: v })} prefix="$" />
+            )}
+            {(properties.length > 0 || rentalIncome60 > 0) && (
+              <InputRow label={`${prop1Label} Rent (annual)`} value={rentalIncome60} onChange={(v) => update({ rentalIncome60: v })} prefix="$" />
+            )}
+            {(properties.length > 1 || rentalIncome72 > 0) && (
+              <InputRow label={`${prop2Label} Rent (annual)`} value={rentalIncome72} onChange={(v) => update({ rentalIncome72: v })} prefix="$" />
+            )}
             <InputRow label="Monthly Living Expenses" value={monthlyExpenses} onChange={(v) => update({ monthlyExpenses: v })} prefix="$" />
             <InputRow label="Annual Existing Debt Payments" value={existingDebt} onChange={(v) => update({ existingDebt: v })} prefix="$" />
             <div className="border-t border-[var(--card-border)] pt-3 mt-3 space-y-2">
@@ -294,11 +346,19 @@ export default function BorrowingPage() {
 
         {/* New Build Scenario */}
         <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] p-5">
-          <h3 className="font-semibold mb-2">New Build Scenario</h3>
-          <p className="text-xs text-[var(--muted)] mb-4">Land + build package — stamp duty on land only</p>
+          <h3 className="font-semibold mb-2">{isNewBuild ? "New Build Scenario" : "Purchase Scenario"}</h3>
+          <p className="text-xs text-[var(--muted)] mb-4">
+            {isNewBuild ? "Land + build package — stamp duty on land only" : "Existing property purchase — stamp duty on full price"}
+          </p>
           <div className="space-y-3">
-            <InputRow label="Land Price" value={landPrice} onChange={(v) => update({ landPrice: v })} prefix="$" />
-            <InputRow label="Build Cost" value={buildCost} onChange={(v) => update({ buildCost: v })} prefix="$" />
+            {isNewBuild ? (
+              <>
+                <InputRow label="Land Price" value={landPrice} onChange={(v) => update({ landPrice: v })} prefix="$" />
+                <InputRow label="Build Cost" value={buildCost} onChange={(v) => update({ buildCost: v })} prefix="$" />
+              </>
+            ) : (
+              <InputRow label="Purchase Price" value={landPrice} onChange={(v) => update({ landPrice: v })} prefix="$" />
+            )}
             <InputRow label="Deposit" value={depositPercent} onChange={(v) => update({ depositPercent: v })} suffix="%" />
             <InputRow label="Interest Rate" value={newLoanRate} onChange={(v) => update({ newLoanRate: v })} suffix="%" step={0.05} />
             <InputRow label="Loan Term" value={newLoanTerm} onChange={(v) => update({ newLoanTerm: v })} suffix="years" />
