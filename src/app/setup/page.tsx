@@ -184,9 +184,21 @@ export default function SetupPage() {
       </div>
 
       <div className="max-w-3xl mx-auto px-4 pb-12">
-        {/* Step indicator */}
-        <div className="text-center text-xs text-[var(--muted)] mb-6">
-          Step {state.step} of {TOTAL_STEPS}
+        {/* Step indicator + Clear All */}
+        <div className="flex items-center justify-between mb-6">
+          <div />
+          <span className="text-xs text-[var(--muted)]">Step {state.step} of {TOTAL_STEPS}</span>
+          <button
+            onClick={async () => {
+              if (confirm("Clear ALL data and start completely fresh? This removes all properties, incomes, loans, and settings.")) {
+                await fetch("/api/clear-all", { method: "DELETE" });
+                setState({ step: 1, people: [], properties: [createProperty()], bankBalance: 0 });
+              }
+            }}
+            className="text-xs text-[var(--muted)] hover:text-[var(--negative)] transition-colors"
+          >
+            Clear All Data
+          </button>
         </div>
 
         {state.step === 1 && (
