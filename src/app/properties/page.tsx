@@ -54,6 +54,16 @@ export default function PropertiesPage() {
                 <h3 className="text-xl font-bold">{property.address}</h3>
                 <p className="text-[var(--muted)]">{property.suburb}, {property.state} {property.postcode}</p>
                 <p className="text-sm text-[var(--muted)] mt-1">Owner: {property.owner}</p>
+                {property.listingUrl && (
+                  <a
+                    href={property.listingUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-sm font-medium text-[var(--accent)] hover:underline mt-1"
+                  >
+                    View on realestate.com.au ↗
+                  </a>
+                )}
               </div>
               <div className="flex items-center gap-3">
                 <span className={`text-xs font-medium px-2 py-0.5 rounded ${
@@ -105,6 +115,8 @@ export default function PropertiesPage() {
                     onChange={(v) => updateProperty(property.id, "carSpaces", v === "" ? 0 : Number(v))} />
                   <EditableRow label="Land Size" value={property.landSize} editing={isEditing}
                     onChange={(v) => updateProperty(property.id, "landSize", v)} />
+                  <ListingUrlRow value={property.listingUrl || ""} editing={isEditing}
+                    onChange={(v) => updateProperty(property.id, "listingUrl", v)} />
                 </div>
               </div>
 
@@ -258,6 +270,28 @@ function PropertyImage({ property, onUploaded }: { property: Property; onUploade
       )}
     </>
   );
+}
+
+function ListingUrlRow({ value, editing, onChange }: {
+  value: string; editing: boolean; onChange: (v: string) => void;
+}) {
+  if (editing) {
+    return (
+      <div className="flex justify-between items-center py-1">
+        <span className="text-sm text-[var(--muted)]">Listing URL</span>
+        <input
+          type="url"
+          value={value}
+          placeholder="https://www.realestate.com.au/property/..."
+          onChange={(e) => onChange(e.target.value)}
+          className="bg-[var(--background)] border border-[var(--card-border)] rounded px-2 py-1 text-sm text-right w-48 focus:border-[var(--accent)] outline-none"
+        />
+      </div>
+    );
+  }
+  // The tappable "View on realestate.com.au" link is shown near the address
+  // above instead of duplicating it here — this row is edit-mode only.
+  return null;
 }
 
 function Row({ label, value, positive }: { label: string; value: string; positive?: boolean }) {
