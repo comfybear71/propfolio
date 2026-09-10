@@ -71,18 +71,47 @@ export async function POST(req: NextRequest) {
     const textBlock = message.content.find((b) => b.type === "text");
     const responseText = textBlock ? textBlock.text : "";
 
-    // Try to parse JSON from the response
-    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const data = JSON.parse(jsonMatch[0]);
-      return NextResponse.json({ ok: true, data });
+    if (!responseText) {
+      return NextResponse.json(
+        { ok: false, error: "Claude returned an empty response — try a clearer scan or a different file format." },
+        { status: 502 }
+      );
     }
 
-    return NextResponse.json({ ok: true, data: {}, raw: responseText });
+    // Try to parse JSON from the response
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      // Claude replied but didn't return structured data — likely couldn't read the
+      // payslip (blurry scan, wrong document, refusal, etc). Surface what it actually
+      // said instead of silently reporting success with an empty/zeroed-out record.
+      return NextResponse.json(
+        {
+          ok: false,
+          error: `Claude couldn't extract payslip data: ${responseText.slice(0, 300)}`,
+        },
+        { status: 502 }
+      );
+    }
+
+    let data: unknown;
+    try {
+      data = JSON.parse(jsonMatch[0]);
+    } catch {
+      return NextResponse.json(
+        { ok: false, error: "Claude's response wasn't valid JSON — try again or enter details manually." },
+        { status: 502 }
+      );
+    }
+
+    return NextResponse.json({ ok: true, data });
   } catch (err) {
+    // Anthropic SDK errors (bad/retired model, auth, rate limit, etc.) carry useful
+    // detail in err.message — surface it instead of a generic failure so the UI
+    // (and Stuart) can see the real cause instead of a blank error.
+    const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json(
-      { ok: false, error: `OCR failed: ${err instanceof Error ? err.message : "Unknown error"}` },
-      { status: 500 }
+      { ok: false, error: `Claude API error: ${message}` },
+      { status: 502 }
     );
   }
 }

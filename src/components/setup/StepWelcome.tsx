@@ -25,9 +25,9 @@ export default function StepWelcome({ people, onUpdate, onAddPerson, onUpdatePer
       const form = new FormData();
       form.append("file", file);
       const res = await fetch("/api/ocr-payslip", { method: "POST", body: form });
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
 
-      if (data.ok && data.data) {
+      if (data?.ok && data.data) {
         const d = data.data;
         const grossPay = d.grossPay || 0;
         const netPay = d.netPay || 0;
@@ -38,6 +38,7 @@ export default function StepWelcome({ people, onUpdate, onAddPerson, onUpdatePer
           name: d.employeeName || "Unknown",
           ocrLoading: false,
           ocrDone: true,
+          ocrError: undefined,
           income: {
             employer: d.employer || "",
             jobTitle: d.jobTitle || "",
@@ -52,10 +53,20 @@ export default function StepWelcome({ people, onUpdate, onAddPerson, onUpdatePer
           },
         });
       } else {
-        onUpdatePerson(newPerson.id, { name: "", ocrLoading: false, ocrDone: false });
+        onUpdatePerson(newPerson.id, {
+          name: "",
+          ocrLoading: false,
+          ocrDone: false,
+          ocrError: data?.error || `Server returned ${res.status}. Please try again.`,
+        });
       }
-    } catch {
-      onUpdatePerson(newPerson.id, { name: "", ocrLoading: false, ocrDone: false });
+    } catch (err) {
+      onUpdatePerson(newPerson.id, {
+        name: "",
+        ocrLoading: false,
+        ocrDone: false,
+        ocrError: err instanceof Error ? err.message : "Upload failed. Check your connection and try again.",
+      });
     }
   }
 
@@ -90,14 +101,14 @@ export default function StepWelcome({ people, onUpdate, onAddPerson, onUpdatePer
 
   function retryUpload(i: number, file: File) {
     const personId = people[i].id;
-    onUpdatePerson(personId, { ocrLoading: true, payslipFile: file });
+    onUpdatePerson(personId, { ocrLoading: true, payslipFile: file, ocrError: undefined });
 
     const form = new FormData();
     form.append("file", file);
     fetch("/api/ocr-payslip", { method: "POST", body: form })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.ok && data.data) {
+      .then(async (res) => ({ res, data: await res.json().catch(() => null) }))
+      .then(({ res, data }) => {
+        if (data?.ok && data.data) {
           const d = data.data;
           const grossPay = d.grossPay || 0;
           const netPay = d.netPay || 0;
@@ -107,6 +118,7 @@ export default function StepWelcome({ people, onUpdate, onAddPerson, onUpdatePer
             name: d.employeeName || people[i].name,
             ocrLoading: false,
             ocrDone: true,
+            ocrError: undefined,
             income: {
               employer: d.employer || "",
               jobTitle: d.jobTitle || "",
@@ -121,11 +133,17 @@ export default function StepWelcome({ people, onUpdate, onAddPerson, onUpdatePer
             },
           });
         } else {
-          onUpdatePerson(personId, { ocrLoading: false });
+          onUpdatePerson(personId, {
+            ocrLoading: false,
+            ocrError: data?.error || `Server returned ${res.status}. Please try again.`,
+          });
         }
       })
-      .catch(() => {
-        onUpdatePerson(personId, { ocrLoading: false });
+      .catch((err) => {
+        onUpdatePerson(personId, {
+          ocrLoading: false,
+          ocrError: err instanceof Error ? err.message : "Upload failed. Check your connection and try again.",
+        });
       });
   }
 
@@ -235,7 +253,7 @@ export default function StepWelcome({ people, onUpdate, onAddPerson, onUpdatePer
             {!person.ocrDone && !person.ocrLoading && (
               <div className="space-y-2">
                 <p className="text-sm text-[var(--negative)]">
-                  Couldn&apos;t read this payslip. Try again:
+                  Couldn&apos;t read this payslip: {person.ocrError || "unknown error"}. Try again:
                 </p>
                 <label className="block border-2 border-dashed border-[var(--card-border)] rounded-lg p-4 text-center cursor-pointer hover:border-[var(--accent)] transition-colors">
                   <span className="text-sm text-[var(--muted)]">Upload payslip PDF</span>
