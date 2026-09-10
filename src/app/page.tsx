@@ -9,9 +9,9 @@ import { useProperties, useLoans, useIncomes, useBorrowingSettings } from "@/lib
 import ShareButton from "@/components/ShareButton";
 
 export default function Dashboard() {
-  const { properties, loaded: pLoaded } = useProperties();
-  const { loans, loaded: lLoaded } = useLoans();
-  const { incomes, loaded: iLoaded } = useIncomes();
+  const { properties, loaded: pLoaded, error: pError } = useProperties();
+  const { loans, loaded: lLoaded, error: lError } = useLoans();
+  const { incomes, loaded: iLoaded, error: iError } = useIncomes();
   const { settings: borrowingSettings, loaded: bLoaded } = useBorrowingSettings({
     stuartGross: incomes[0]?.annualGross ?? 0,
     sasitronGross: incomes[1]?.annualGross ?? 0,
@@ -25,12 +25,20 @@ export default function Dashboard() {
   const router = useRouter();
   const [docStats, setDocStats] = useState({ total: 0, have: 0, loaded: false });
 
-  // Redirect to setup wizard if user has no income data (new user OR they deleted everything)
+  // Redirect to setup wizard only once we've *confirmed* (all three collections
+  // loaded successfully, with no fetch/auth errors) that the user has no data
+  // at all. Previously this only checked incomes.length === 0, which meant a
+  // returning user with properties/loans but a transient incomes fetch
+  // failure (e.g. a 401 while the session was still hydrating) — or simply no
+  // income records yet — was wrongly bounced back into onboarding.
   useEffect(() => {
-    if (iLoaded && incomes.length === 0) {
+    if (!pLoaded || !lLoaded || !iLoaded) return;
+    if (pError || lError || iError) return;
+    const hasNoData = incomes.length === 0 && properties.length === 0 && loans.length === 0;
+    if (hasNoData) {
       router.replace("/setup");
     }
-  }, [iLoaded, incomes.length, router]);
+  }, [pLoaded, lLoaded, iLoaded, pError, lError, iError, incomes.length, properties.length, loans.length, router]);
 
   useEffect(() => {
     fetch("/api/documents").then(r => r.json()).then(docs => {
