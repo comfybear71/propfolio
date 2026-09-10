@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
 import { formatCurrency, formatCurrencyExact, type Property, type Loan } from "@/lib/data";
 import { useProperties, useLoans } from "@/lib/useData";
 
@@ -43,14 +42,10 @@ export default function PropertiesPage() {
 
         return (
           <div key={property.id} className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] overflow-hidden">
-            <div className="relative h-56 w-full">
-              <Image
-                src={property.image}
-                alt={property.address}
-                fill
-                className="object-cover"
-              />
-            </div>
+            <PropertyImage
+              property={property}
+              onUploaded={(url) => updateProperty(property.id, "image", url)}
+            />
             <div className="p-6">
             <div className="flex items-start justify-between mb-4">
               <div>
@@ -180,6 +175,86 @@ export default function PropertiesPage() {
         );
       })}
     </div>
+  );
+}
+
+function PropertyImage({ property, onUploaded }: { property: Property; onUploaded: (url: string) => void }) {
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+
+  async function handleFile(file: File) {
+    setError(null);
+    const localPreview = URL.createObjectURL(file);
+    setPreview(localPreview);
+    setUploading(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("propertyId", property.id);
+      const res = await fetch("/api/properties/image", { method: "POST", body: formData });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) {
+        setError(data.error || `Upload failed (${res.status})`);
+      } else {
+        onUploaded(data.url);
+      }
+    } catch (err) {
+      setError("Upload failed: " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setUploading(false);
+      URL.revokeObjectURL(localPreview);
+      setPreview(null);
+    }
+  }
+
+  const displaySrc = preview || property.image || null;
+
+  return (
+    <>
+      <div className="relative h-56 w-full bg-[var(--background)]">
+        {displaySrc ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={displaySrc}
+            alt={property.address}
+            className="absolute inset-0 w-full h-full object-cover"
+          />
+        ) : (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-[var(--muted)]">
+            <span className="text-3xl">📷</span>
+            <span className="text-sm">No photo yet — tap below to add one</span>
+          </div>
+        )}
+
+        {uploading && (
+          <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-sm text-white">
+            Uploading...
+          </div>
+        )}
+
+        <label className="absolute bottom-3 right-3 bg-black/70 text-white text-xs font-medium px-3 py-2 rounded-lg cursor-pointer hover:bg-black/90 transition-colors">
+          {property.image ? "Change photo" : "Add photo"}
+          <input
+            type="file"
+            accept="image/*"
+            className="hidden"
+            disabled={uploading}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleFile(f);
+              e.target.value = "";
+            }}
+          />
+        </label>
+      </div>
+      {error && (
+        <div className="bg-[var(--negative)]/10 border-b border-[var(--negative)]/30 text-[var(--negative)] text-xs px-4 py-2">
+          {error}
+        </div>
+      )}
+    </>
   );
 }
 
