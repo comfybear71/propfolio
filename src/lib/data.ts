@@ -22,6 +22,7 @@ export interface Property {
   weeklyRent: number;
   rentNotes: string;
   image: string;
+  listingUrl?: string;
 }
 
 export interface Loan {
