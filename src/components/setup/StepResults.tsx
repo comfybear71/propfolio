@@ -77,12 +77,22 @@ export default function StepResults({ people, properties, bankBalance, onBack, o
 
         {/* Portfolio */}
         <Card title="Property Portfolio">
-          <Row label="Total value" value={formatCurrency(totalValue)} highlight />
-          <Row label="Total debt" value={formatCurrency(totalDebt)} />
-          <Row label="Total equity" value={formatCurrency(totalEquity)} highlight />
-          <Row label="Offset savings" value={formatCurrency(totalOffset)} />
+          {properties.length === 0 ? (
+            <p className="text-sm text-[var(--muted)]">
+              No properties added yet — you can add them anytime from the Properties page.
+            </p>
+          ) : (
+            <>
+              <Row label="Total value" value={formatCurrency(totalValue)} highlight />
+              <Row label="Total debt" value={formatCurrency(totalDebt)} />
+              <Row label="Total equity" value={formatCurrency(totalEquity)} highlight />
+              <Row label="Offset savings" value={formatCurrency(totalOffset)} />
+            </>
+          )}
           <Row label="Bank savings" value={formatCurrency(bankBalance)} />
-          <Row label="Usable equity (80% LVR)" value={formatCurrency(usableEquity)} highlight />
+          {properties.length > 0 && (
+            <Row label="Usable equity (80% LVR)" value={formatCurrency(usableEquity)} highlight />
+          )}
         </Card>
 
         {/* Borrowing Power */}

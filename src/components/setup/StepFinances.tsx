@@ -22,7 +22,9 @@ export default function StepFinances({
       <div className="text-center space-y-2">
         <h2 className="text-2xl font-bold">Your Finances</h2>
         <p className="text-[var(--muted)]">
-          Loan balances and savings — just a few numbers
+          {properties.length > 0
+            ? "Loan balances and savings — just a few numbers"
+            : "No properties yet — savings are optional too, add anytime later"}
         </p>
       </div>
 
