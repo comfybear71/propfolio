@@ -34,7 +34,10 @@ export async function POST(req: NextRequest) {
 
   try {
     const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
+      // claude-sonnet-4-20250514 was retired by Anthropic on 2026-06-15 —
+      // every call using it now fails outright. claude-sonnet-4-6 is
+      // Anthropic's documented direct replacement for that exact model.
+      model: "claude-sonnet-4-6",
       max_tokens: 2000,
       messages: [
         {
