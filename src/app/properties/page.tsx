@@ -5,7 +5,7 @@ import { formatCurrency, formatCurrencyExact, type Property, type Loan } from "@
 import { useProperties, useLoans } from "@/lib/useData";
 
 export default function PropertiesPage() {
-  const { properties: propertyData, saveProperty, removeProperty, loaded: pLoaded } = useProperties();
+  const { properties: propertyData, setProperties, saveProperty, removeProperty, loaded: pLoaded } = useProperties();
   const { loans: loanData, saveLoan, removeLoan, loaded: lLoaded } = useLoans();
   const [editing, setEditing] = useState<string | null>(null);
 
@@ -44,7 +44,9 @@ export default function PropertiesPage() {
           <div key={property.id} className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] overflow-hidden">
             <PropertyImage
               property={property}
-              onUploaded={(url) => updateProperty(property.id, "image", url)}
+              onUploaded={(url) =>
+                setProperties((prev) => prev.map((p) => (p.id === property.id ? { ...p, image: url } : p)))
+              }
             />
             <div className="p-6">
             <div className="flex items-start justify-between mb-4">

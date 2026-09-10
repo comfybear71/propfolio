@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { formatCurrency } from "@/lib/data";
 import { useProperties, useLoans, useIncomes, useBorrowingSettings } from "@/lib/useData";
@@ -474,13 +473,15 @@ export default function Dashboard() {
 
             return (
               <div key={property.id} className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] overflow-hidden">
-                <div className="relative h-48 w-full">
-                  <Image
-                    src={property.image}
-                    alt={property.address}
-                    fill
-                    className="object-cover"
-                  />
+                <div className="relative h-48 w-full bg-[var(--background)]">
+                  {property.image ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={property.image}
+                      alt={property.address}
+                      className="absolute inset-0 w-full h-full object-cover"
+                    />
+                  ) : null}
                 </div>
                 <div className="p-5">
                 <div className="flex items-start justify-between mb-3">
