@@ -14,12 +14,16 @@ import {
 export function useProperties() {
   const [data, setData] = useState<Property[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     fetch("/api/properties")
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`Failed to load properties: ${r.status}`);
+        return r.json();
+      })
       .then((d) => { setData(Array.isArray(d) ? d : []); setLoaded(true); })
-      .catch(() => setLoaded(true));
+      .catch(() => { setError(true); setLoaded(true); });
   }, []);
 
   const save = useCallback(async (updated: Property) => {
@@ -37,18 +41,22 @@ export function useProperties() {
     await fetch(`/api/properties?id=${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => {});
   }, []);
 
-  return { properties: data, setProperties: setData, saveProperty: save, removeProperty: remove, loaded };
+  return { properties: data, setProperties: setData, saveProperty: save, removeProperty: remove, loaded, error };
 }
 
 export function useLoans() {
   const [data, setData] = useState<Loan[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     fetch("/api/loans")
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`Failed to load loans: ${r.status}`);
+        return r.json();
+      })
       .then((d) => { setData(Array.isArray(d) ? d : []); setLoaded(true); })
-      .catch(() => setLoaded(true));
+      .catch(() => { setError(true); setLoaded(true); });
   }, []);
 
   const save = useCallback(async (updated: Loan) => {
@@ -66,18 +74,22 @@ export function useLoans() {
     await fetch(`/api/loans?id=${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => {});
   }, []);
 
-  return { loans: data, setLoans: setData, saveLoan: save, removeLoan: remove, loaded };
+  return { loans: data, setLoans: setData, saveLoan: save, removeLoan: remove, loaded, error };
 }
 
 export function useIncomes() {
   const [data, setData] = useState<Income[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     fetch("/api/incomes")
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`Failed to load incomes: ${r.status}`);
+        return r.json();
+      })
       .then((d) => { setData(Array.isArray(d) ? d : []); setLoaded(true); })
-      .catch(() => setLoaded(true));
+      .catch(() => { setError(true); setLoaded(true); });
   }, []);
 
   const save = useCallback(async (updated: Income) => {
@@ -95,7 +107,7 @@ export function useIncomes() {
     await fetch(`/api/incomes?id=${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => {});
   }, []);
 
-  return { incomes: data, setIncomes: setData, saveIncome: save, removeIncome: remove, loaded };
+  return { incomes: data, setIncomes: setData, saveIncome: save, removeIncome: remove, loaded, error };
 }
 
 export function useExpenses() {

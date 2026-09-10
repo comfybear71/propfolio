@@ -6,6 +6,7 @@ export interface Person {
   payslipFile: File | null;
   ocrDone: boolean;
   ocrLoading: boolean;
+  ocrError?: string;
   income: {
     employer: string;
     jobTitle: string;
@@ -63,6 +64,7 @@ export function createPerson(name: string): Person {
     payslipFile: null,
     ocrDone: false,
     ocrLoading: false,
+    ocrError: undefined,
     income: null,
   };
 }

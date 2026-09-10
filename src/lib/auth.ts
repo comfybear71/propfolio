@@ -17,6 +17,15 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           prompt: "select_account",
         },
       },
+      // Without this, a user who first registered via the Credentials
+      // (email/password) provider and later signs in with Google using the
+      // *same* email gets a brand-new, separate user id — because the
+      // adapter only links accounts by email automatically when this flag is
+      // set. That second identity has no properties/loans/incomes attached
+      // to it, which makes the dashboard treat them as a brand-new user and
+      // send them back through onboarding. Google verifies email ownership,
+      // so linking on email match here is safe for this app.
+      allowDangerousEmailAccountLinking: true,
     }),
     Credentials({
       name: "Email",
