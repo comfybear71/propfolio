@@ -27,6 +27,14 @@ export default function StepProperties({ properties, people, onUpdate, onNext, o
     onUpdate(updated);
   }
 
+  // Properties are optional — a household can finish setup with just payslips
+  // and add properties later from the Properties page.
+  function skipProperties() {
+    onUpdate([]);
+    onNext();
+  }
+
+  const hasAnyAddress = properties.some((p) => p.address.trim());
   const canProceed = properties.length > 0 && properties.every((p) => p.address.trim());
 
   return (
@@ -35,6 +43,9 @@ export default function StepProperties({ properties, people, onUpdate, onNext, o
         <h2 className="text-2xl font-bold">Your Properties</h2>
         <p className="text-[var(--muted)]">
           Type your address, then paste your realestate.com.au URL for details
+        </p>
+        <p className="text-[var(--muted)] text-sm">
+          Optional — you can skip this and add properties later
         </p>
       </div>
 
@@ -59,17 +70,27 @@ export default function StepProperties({ properties, people, onUpdate, onNext, o
         </button>
       </div>
 
-      <div className="flex justify-between max-w-lg mx-auto pt-4">
+      <div className="flex justify-between items-center max-w-lg mx-auto pt-4">
         <button onClick={onBack} className="px-6 py-3 text-[var(--muted)] hover:text-white transition-colors">
           Back
         </button>
-        <button
-          onClick={onNext}
-          disabled={!canProceed}
-          className="px-8 py-3 bg-[var(--accent)] text-white rounded-lg font-medium hover:bg-[var(--accent-hover)] transition-colors disabled:opacity-40"
-        >
-          Next
-        </button>
+        <div className="flex items-center gap-4">
+          {!hasAnyAddress && (
+            <button
+              onClick={skipProperties}
+              className="text-sm text-[var(--muted)] hover:text-white underline transition-colors"
+            >
+              Skip — add properties later
+            </button>
+          )}
+          <button
+            onClick={onNext}
+            disabled={!canProceed}
+            className="px-8 py-3 bg-[var(--accent)] text-white rounded-lg font-medium hover:bg-[var(--accent-hover)] transition-colors disabled:opacity-40"
+          >
+            Next
+          </button>
+        </div>
       </div>
     </div>
   );
